@@ -168,7 +168,18 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   };
 
-  const [userBarangays, setUserBarangays] = useState<string[]>([]);
+  const [userBarangays, setUserBarangays] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('serbisure_admin_user_barangays');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // fallback
+    }
+    return ['Canitoan', 'Pagatpat', 'Macasandig', 'Carmen', 'Agusan', 'Balubal', 'Bagong Silang'];
+  });
   const [verifications, setVerifications] = useState<VerificationRequest[]>([]);
   const [selectedVerificationId, setSelectedVerificationId] = useState<string>('');
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
@@ -214,6 +225,25 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
   }, [currentUser]);
+
+  // Handle global auth expiration event (e.g. HTTP 401 from cloud backend)
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      console.warn('[Admin Auth] Session expired or revoked. Resetting authentication state.');
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      try {
+        localStorage.removeItem('serbisure_admin_auth');
+        localStorage.removeItem('serbisure_admin_user');
+        localStorage.removeItem('serbisure_admin_token');
+      } catch (e) {
+        console.error('Failed to clear expired auth from storage:', e);
+      }
+    };
+
+    window.addEventListener('serbisure:auth_expired', handleAuthExpired);
+    return () => window.removeEventListener('serbisure:auth_expired', handleAuthExpired);
+  }, []);
 
   const setRoleSafely = (role: AdminRole) => {
     // Only superadmin can change or switch roles
@@ -325,6 +355,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       if (allUserBgys.length > 0) {
         setUserBarangays(allUserBgys);
+        try {
+          localStorage.setItem('serbisure_admin_user_barangays', JSON.stringify(allUserBgys));
+        } catch {
+          // ignore storage errors
+        }
       }
     } catch (err) {
       console.warn('[Admin API] Active LGU barangays fetch failed, using cache/fallback:', err);
@@ -369,12 +404,10 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [currentRole, selectedBarangay]);
 
-  // Fetch LGU barangay list once when authenticated (single source of truth)
+  // Fetch LGU and all database resident barangay list on initial load
   useEffect(() => {
-    if (isAuthenticated) {
-      refreshLguBarangays();
-    }
-  }, [isAuthenticated, refreshLguBarangays]);
+    refreshLguBarangays();
+  }, [refreshLguBarangays]);
 
   // Fetch live backend data on initial load, role/barangay change, plus real-time polling
   useEffect(() => {
