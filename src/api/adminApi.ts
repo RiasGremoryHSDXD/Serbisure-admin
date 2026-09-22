@@ -147,3 +147,26 @@ export async function fetchAllUserBarangays(): Promise<string[]> {
   return Array.isArray(res.barangays) ? res.barangays : [];
 }
 
+export interface VerificationStatusStats {
+  verified: number;
+  pending: number;
+  unverified: number;
+  rejected: number;
+}
+
+export interface VerificationStatusStatsResponse {
+  barangay: string;
+  stats: VerificationStatusStats;
+  total: number;
+}
+
+export async function fetchVerificationStatusStats(
+  barangay?: string
+): Promise<VerificationStatusStatsResponse> {
+  const params = new URLSearchParams();
+  if (barangay && barangay !== 'All Barangays') params.append('barangay', barangay);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return fetchApi<VerificationStatusStatsResponse>(
+    `/api/v1/accounts/admin/verification-status-stats/${query}`
+  );
+}
