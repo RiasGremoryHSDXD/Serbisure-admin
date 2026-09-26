@@ -4,6 +4,7 @@ import { BARANGAYS_DATA } from '../data/mockData';
 import { fetchVerificationQueue, reviewVerification, fetchRegisteredUsers, fetchDashboardStats, fetchDashboardActivity, fetchMonthlyTrend, MonthlyTrendPoint, adminLoginApi, fetchActiveLguBarangays, fetchAllUserBarangays, fetchAuditLogs } from '../api/adminApi';
 
 export interface AdminUser {
+  id?: string;
   username: string;
   name: string;
   role: AdminRole;
@@ -440,6 +441,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const res = await adminLoginApi(cleanInput, cleanPass);
       if (res && res.success && res.user) {
         const user: AdminUser = {
+          id: res.user.id,
           username: res.user.username,
           name: res.user.name,
           role: res.user.role as AdminRole,
