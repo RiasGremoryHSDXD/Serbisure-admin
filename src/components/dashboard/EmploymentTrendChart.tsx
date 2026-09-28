@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronDown, TrendingUp, BarChart3, Briefcase, UserCheck, Users } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { fetchMonthlyTrend, MonthlyTrendPoint } from '../../api/adminApi';
 
 export const EmploymentTrendChart: React.FC = () => {
   const { 
-    monthlyTrend, 
     isLoadingMonthlyTrend, 
     selectedBarangay, 
-    barangays 
+    barangays,
+    userBarangays,
   } = useAdmin();
 
   // Selected barangay for the chart; defaults to Pagatpat as requested
@@ -21,7 +21,6 @@ export const EmploymentTrendChart: React.FC = () => {
 
   const [chartData, setChartData] = useState<MonthlyTrendPoint[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [metaStats, setMetaStats] = useState<{ total: number; onJob: number; available: number } | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   // Synchronize when parent selectedBarangay changes (e.g. from navbar selector)
@@ -42,12 +41,7 @@ export const EmploymentTrendChart: React.FC = () => {
         if (!isMounted) return;
         if (res && Array.isArray(res.trend) && res.trend.length > 0) {
           setChartData(res.trend);
-          setHoveredIdx(res.trend.length - 1); // Default to current month
-          setMetaStats({
-            total: res.total_workers ?? (res.trend[res.trend.length - 1]?.total || 0),
-            onJob: res.current_on_the_job ?? (res.trend[res.trend.length - 1]?.employed || 0),
-            available: res.current_available ?? (res.trend[res.trend.length - 1]?.available || 0),
-          });
+          // Do NOT pre-select any month — tooltip should only appear on hover
         }
       })
       .catch((err) => {
@@ -60,7 +54,7 @@ export const EmploymentTrendChart: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [activeBarangay, monthlyTrend]);
+  }, [activeBarangay]);
 
   // Fallback data if still empty
   const DISPLAY_DATA: MonthlyTrendPoint[] = useMemo(() => {
@@ -76,25 +70,12 @@ export const EmploymentTrendChart: React.FC = () => {
     }));
   }, [chartData]);
 
-  // Current latest data point
-  const currentMonthPoint = DISPLAY_DATA[DISPLAY_DATA.length - 1] || {
-    employed: 0,
-    available: 0,
-    total: 0,
-  };
-
-  // Trend Delta calculation
-  const lastMonth = DISPLAY_DATA.length > 0 ? DISPLAY_DATA[DISPLAY_DATA.length - 1] : null;
-  const prevMonth = DISPLAY_DATA.length > 1 ? DISPLAY_DATA[DISPLAY_DATA.length - 2] : null;
-  const trendDelta = (lastMonth && prevMonth && prevMonth.employed > 0)
-    ? (((lastMonth.employed - prevMonth.employed) / prevMonth.employed) * 100).toFixed(1)
-    : null;
 
   // Chart dimensions
-  const width = 660;
+  const width = 560;
   const height = 230;
-  const paddingLeft = 42;
-  const paddingRight = 20;
+  const paddingLeft = 40;
+  const paddingRight = 16;
   const paddingTop = 32;
   const paddingBottom = 34;
 
@@ -120,62 +101,72 @@ export const EmploymentTrendChart: React.FC = () => {
 
   // Bar slot measurements
   const slotWidth = chartAreaWidth / DISPLAY_DATA.length;
-  const barWidth = 11;
+  const barWidth = 10;
   const barSpacing = 3;
 
-  const activeHoverIdx = hoveredIdx ?? DISPLAY_DATA.length - 1;
-  const activeHoverPoint = DISPLAY_DATA[activeHoverIdx] || currentMonthPoint;
+  const activeHoverIdx = hoveredIdx;
+  const activeHoverPoint = hoveredIdx !== null ? DISPLAY_DATA[hoveredIdx] : null;
 
-  // Unique list of barangays for selector
+  // Helper to normalize barangay strings
+  const cleanBarangayName = (name?: string) => {
+    return (name || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+  };
+
+  // Complete, alphabetically sorted list of all barangays found in DB
   const barangayOptions = useMemo(() => {
-    const list = new Set<string>();
-    list.add('Pagatpat'); // Priority focus
-    list.add('Canitoan');
-    if (barangays && Array.isArray(barangays)) {
-      barangays.forEach((b) => {
-        if (b.name && b.name !== 'All Barangays') list.add(b.name);
-      });
-    }
-    return ['Pagatpat', ...Array.from(list).filter(b => b !== 'Pagatpat'), 'All Barangays'];
-  }, [barangays]);
+    const map = new Map<string, string>();
+
+    // Add active LGUs from context
+    (barangays || []).forEach((b) => {
+      const cleaned = cleanBarangayName(b.name);
+      if (cleaned && cleaned.toLowerCase() !== 'all' && cleaned.toLowerCase() !== 'all barangays' && cleaned.toLowerCase() !== 'unassigned') {
+        const key = cleaned.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, cleaned.charAt(0).toUpperCase() + cleaned.slice(1));
+        }
+      }
+    });
+
+    // Add all registered user barangays from backend DB (e.g. Macasandig, Carmen, Agusan, etc.)
+    (userBarangays || []).forEach((b) => {
+      const cleaned = cleanBarangayName(b);
+      if (cleaned && cleaned.toLowerCase() !== 'all' && cleaned.toLowerCase() !== 'all barangays' && cleaned.toLowerCase() !== 'unassigned') {
+        const key = cleaned.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, cleaned.charAt(0).toUpperCase() + cleaned.slice(1));
+        }
+      }
+    });
+
+    // Priority focus barangays
+    ['Pagatpat', 'Canitoan'].forEach((priority) => {
+      const key = priority.toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, priority);
+      }
+    });
+
+    // Sort all individual barangays alphabetically
+    const sorted = Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+    const otherBarangays = sorted.filter((b) => b !== 'Pagatpat' && b !== 'Canitoan');
+
+    return ['All Barangays', 'Pagatpat', 'Canitoan', ...otherBarangays];
+  }, [barangays, userBarangays]);
 
   return (
     <div className="bg-white rounded-3xl p-6 sm:p-7 flex flex-col justify-between h-full relative shadow-sm border border-zinc-100">
-      {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200/60 flex items-center justify-center text-orange-600">
-              <BarChart3 className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-black font-display text-[#0D0D11] tracking-tight">
-                  Employment Trends
-                </h3>
-                {isLoading || isLoadingMonthlyTrend ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-400 text-[10px] font-extrabold animate-pulse">
-                    Updating...
-                  </span>
-                ) : trendDelta !== null ? (
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border ${
-                    Number(trendDelta) >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200/50' : 'bg-rose-50 text-rose-700 border-rose-200/50'
-                  }`}>
-                    <TrendingUp className="w-3 h-3" />
-                    {Number(trendDelta) >= 0 ? '+' : ''}{trendDelta}% MoM
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-extrabold border border-emerald-200/50">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Live • Brgy. {activeBarangay}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-zinc-400 mt-0.5 font-medium">
-                Kasambahay workforce: <span className="font-semibold text-orange-600">On the Job</span> vs <span className="font-semibold text-zinc-700">Available</span>
-              </p>
-            </div>
-          </div>
+      {/* Minimal Header & Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-lg font-black font-display text-[#0D0D11] tracking-tight">
+            Employment Trends
+          </h3>
+          {(isLoading || isLoadingMonthlyTrend) && (
+            <div 
+              className="w-3.5 h-3.5 border-2 border-orange-500/20 border-t-orange-500 rounded-full animate-spin" 
+              title="Updating live metrics..." 
+            />
+          )}
         </div>
 
         {/* Legend & Barangay Filter */}
@@ -210,50 +201,14 @@ export const EmploymentTrendChart: React.FC = () => {
         </div>
       </div>
 
-      {/* Live KPI Quick Glance in the Barangay */}
-      <div className="grid grid-cols-3 gap-2.5 my-2">
-        <div className="bg-[#FFF8F3] border border-orange-100/90 rounded-2xl px-3.5 py-2 flex items-center justify-between">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-wider text-orange-700">On the Job</div>
-            <div className="text-lg font-black text-orange-600 font-display leading-tight">
-              {metaStats?.onJob ?? currentMonthPoint.employed}
-            </div>
-          </div>
-          <div className="w-6 h-6 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
-            <Briefcase className="w-3.5 h-3.5" />
-          </div>
-        </div>
 
-        <div className="bg-[#F8F9FA] border border-zinc-200/70 rounded-2xl px-3.5 py-2 flex items-center justify-between">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-wider text-zinc-600">Available</div>
-            <div className="text-lg font-black text-[#0D0D11] font-display leading-tight">
-              {metaStats?.available ?? currentMonthPoint.available}
-            </div>
-          </div>
-          <div className="w-6 h-6 rounded-lg bg-zinc-200/80 text-zinc-800 flex items-center justify-center">
-            <UserCheck className="w-3.5 h-3.5" />
-          </div>
-        </div>
-
-        <div className="bg-[#FAFAF7] border border-amber-200/60 rounded-2xl px-3.5 py-2 flex items-center justify-between">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Total Kasambahay</div>
-            <div className="text-lg font-black text-zinc-900 font-display leading-tight">
-              {metaStats?.total ?? currentMonthPoint.total}
-            </div>
-          </div>
-          <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
-            <Users className="w-3.5 h-3.5" />
-          </div>
-        </div>
-      </div>
 
       {/* SVG Bar Graph */}
       <div className="relative w-full overflow-hidden mt-1">
         <svg
           viewBox={`0 0 ${width} ${height}`}
           className="w-full h-auto overflow-visible select-none"
+          onMouseLeave={() => setHoveredIdx(null)}
         >
           <defs>
             {/* Orange Gradient for On the Job bars */}
@@ -421,8 +376,7 @@ export const EmploymentTrendChart: React.FC = () => {
           })}
         </svg>
 
-        {/* Floating Tooltip displaying On the Job & Available breakdown */}
-        {activeHoverIdx !== null && activeHoverPoint && (
+        {hoveredIdx !== null && activeHoverIdx !== null && activeHoverPoint && (
           <div
             className="absolute z-20 pointer-events-none transition-all duration-150 bg-[#0D0D11] text-white p-3 rounded-2xl text-xs w-44 ring-1 ring-white/10 shadow-xl"
             style={{
@@ -441,7 +395,7 @@ export const EmploymentTrendChart: React.FC = () => {
                 {activeHoverPoint.month} {activeHoverPoint.year || 2026}
               </span>
               <span className="text-[9px] text-zinc-400 font-semibold px-1.5 py-0.5 bg-zinc-800 rounded">
-                Brgy. {activeBarangay}
+                {activeBarangay === 'All Barangays' ? 'All CDO' : `Brgy. ${activeBarangay}`}
               </span>
             </div>
 

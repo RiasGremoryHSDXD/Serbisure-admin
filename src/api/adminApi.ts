@@ -1,5 +1,6 @@
 import { fetchApi } from './apiClient';
-import { VerificationRequest, UserProfile, DashboardStatsResponse, BookingCompliance, AuditLogEntry } from '../types/admin';
+import { VerificationRequest, UserProfile, DashboardStatsResponse, BookingCompliance, AuditLogEntry, ChatInboxEntry } from '../types/admin';
+import type { ChatMessage } from '../types/admin';
 
 export async function fetchVerificationQueue(
   role?: string, 
@@ -146,4 +147,138 @@ export async function fetchAllUserBarangays(): Promise<string[]> {
   }
   return Array.isArray(res.barangays) ? res.barangays : [];
 }
+
+export interface VerificationStatusStats {
+  verified: number;
+  pending: number;
+  unverified: number;
+  rejected: number;
+}
+
+export interface VerificationStatusStatsResponse {
+  barangay: string;
+  stats: VerificationStatusStats;
+  total: number;
+}
+
+export async function fetchVerificationStatusStats(
+  barangay?: string
+): Promise<VerificationStatusStatsResponse> {
+  const params = new URLSearchParams();
+  if (barangay && barangay !== 'All Barangays') params.append('barangay', barangay);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return fetchApi<VerificationStatusStatsResponse>(
+    `/api/v1/accounts/admin/verification-status-stats/${query}`
+  );
+}
+
+/**
+ * Fetch the full message thread between the admin and a specific user.
+ * GET /api/v1/chat/thread/<partner_id>/
+ */
+export async function fetchChatThread(partnerId: string): Promise<ChatMessage[]> {
+  const res = await fetchApi<{ data?: ChatMessage[]; results?: ChatMessage[] }>(
+    `/api/v1/chat/thread/${partnerId}/`
+  );
+  return res.data ?? res.results ?? [];
+}
+
+/**
+ * Send a text message to a user as the admin.
+ * POST /api/v1/chat/send/
+ * Requires Idempotency-Key header (fresh UUID v4 per call).
+ */
+export async function sendChatMessage(
+  receiverId: string,
+  messagePayload: string
+): Promise<ChatMessage> {
+  const idempotencyKey = crypto.randomUUID();
+  const res = await fetchApi<{ message: string; data: ChatMessage }>(
+    '/api/v1/chat/send/',
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify({ receiver_id: receiverId, message_payload: messagePayload }),
+    }
+  );
+  return res.data;
+}
+
+/**
+ * Send an image message with optional caption to a user as the admin.
+ * POST /api/v1/chat/send-image/
+ * Supports JPEG, PNG, and WEBP up to 10MB.
+ * Requires Idempotency-Key header.
+ * Uses FormData so apiClient lets the browser set multipart boundary.
+ */
+export async function sendChatImageMessage(
+  receiverId: string,
+  imageFile: File,
+  caption?: string
+): Promise<ChatMessage> {
+  const idempotencyKey = crypto.randomUUID();
+  const formData = new FormData();
+  formData.append('receiver_id', receiverId);
+  formData.append('image', imageFile);
+  if (caption && caption.trim()) {
+    formData.append('message_payload', caption.trim());
+  }
+
+  const res = await fetchApi<{ message: string; data: ChatMessage }>(
+    '/api/v1/chat/send-image/',
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: formData,
+    }
+  );
+  return res.data;
+}
+
+/**
+ * Mark a specific message as read.
+ * PATCH /api/v1/chat/read/<message_id>/
+ */
+export async function markMessageRead(messageId: string): Promise<void> {
+  await fetchApi<unknown>(`/api/v1/chat/read/${messageId}/`, { method: 'PATCH' });
+}
+
+export interface ToggleReactionResponse {
+  message: string;
+  data: {
+    chat_message_id: string;
+    action: 'added' | 'removed' | 'changed';
+    my_reaction: string | null;
+    reaction_counts: Record<string, number>;
+  };
+}
+
+/**
+ * Toggle an emoji reaction on a message.
+ * POST /api/v1/chat/react/<message_id>/
+ */
+export async function toggleChatReaction(
+  messageId: string,
+  emoji: string
+): Promise<ToggleReactionResponse> {
+  return fetchApi<ToggleReactionResponse>(`/api/v1/chat/react/${messageId}/`, {
+    method: 'POST',
+    body: JSON.stringify({ emoji }),
+  });
+}
+
+/**
+ * Fetch the admin's conversation inbox — all partners sorted by most recent message.
+ * GET /api/v1/chat/inbox/
+ */
+export async function fetchChatInbox(): Promise<ChatInboxEntry[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const res = await fetchApi<any>('/api/v1/chat/inbox/');
+  // Handle all backend envelope shapes
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res?.data)) return res.data;
+  if (Array.isArray(res?.results)) return res.results;
+  return [];
+}
+
 

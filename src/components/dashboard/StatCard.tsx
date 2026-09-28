@@ -51,8 +51,8 @@ export const StatCard: React.FC<StatCardProps> = ({
   label,
   value,
   icon: Icon,
-  trend = '+12.4%',
-  subtext = 'vs last month',
+  trend,
+  subtext,
   color = 'peach',
 }) => {
   const theme = COLOR_THEMES[color] || COLOR_THEMES.peach;
@@ -74,13 +74,15 @@ export const StatCard: React.FC<StatCardProps> = ({
           <div className="text-3xl sm:text-4xl font-black font-display text-[#0D0D11] tracking-tight">
             {typeof value === 'number' ? value.toLocaleString() : value}
           </div>
-          <div className="flex items-center gap-2 mt-2.5 text-xs font-bold text-zinc-500">
-            <span className="inline-flex items-center gap-1 text-emerald-700 font-extrabold bg-white/80 px-2.5 py-0.5 rounded-full text-[11px] shadow-xs">
-              <TrendingUp className="w-3 h-3" />
-              {trend}
-            </span>
-            <span className="font-semibold text-[11px] text-zinc-500">{subtext}</span>
-          </div>
+          {trend && (
+            <div className="flex items-center gap-2 mt-2.5 text-xs font-bold text-zinc-500">
+              <span className="inline-flex items-center gap-1 text-emerald-700 font-extrabold bg-white/80 px-2.5 py-0.5 rounded-full text-[11px] shadow-xs">
+                <TrendingUp className="w-3 h-3" />
+                {trend}
+              </span>
+              {subtext && <span className="font-semibold text-[11px] text-zinc-500">{subtext}</span>}
+            </div>
+          )}
         </div>
 
         <Icon

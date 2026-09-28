@@ -12,15 +12,19 @@ const MainLayout: React.FC = () => {
   const { activeNav } = useAdmin();
 
   return (
-    <div className="flex min-h-screen bg-[#F6F5F2]">
+    <div className={`flex bg-[#F6F5F2] ${activeNav === 'users' ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
       {/* Fixed/Sticky Sidebar matching mockups */}
       <Sidebar />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <Header />
         
-        <main className="flex-1 p-8 max-w-7xl w-full mx-auto">
+        <main className={
+          activeNav === 'users'
+            ? 'flex-1 flex flex-col min-w-0 overflow-hidden'
+            : 'flex-1 p-8 max-w-7xl w-full mx-auto'
+        }>
           {activeNav === 'dashboard' && <DashboardPage />}
           {activeNav === 'verifications' && <VerificationsPage />}
           {activeNav === 'users' && <UsersPage />}

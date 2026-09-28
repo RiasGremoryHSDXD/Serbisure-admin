@@ -3,7 +3,7 @@ import { Users, Briefcase, UserCheck, RotateCw } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';
 import { StatCard } from '../components/dashboard/StatCard';
 import { EmploymentTrendChart } from '../components/dashboard/EmploymentTrendChart';
-import { EmploymentGauge } from '../components/dashboard/EmploymentGauge';
+import { VerificationStatusChart } from '../components/dashboard/VerificationStatusChart';
 import { DashboardActivityTable } from '../components/dashboard/DashboardActivityTable';
 import { SuperAdminBreakdown } from '../components/dashboard/SuperAdminBreakdown';
 import { CITY_METRICS } from '../data/mockData';
@@ -42,11 +42,6 @@ export const DashboardPage: React.FC = () => {
     ? CITY_METRICS.totalAvailable
     : activeBarangay?.available ?? 0;
 
-  const employedPercentage = dashboardMetrics
-    ? dashboardMetrics.employmentRatio
-    : isSuperadmin
-    ? 59
-    : activeBarangay?.employmentRatio ?? 0;
 
   return (
     <div className="space-y-7 animate-in fade-in duration-200">
@@ -131,17 +126,13 @@ export const DashboardPage: React.FC = () => {
       {/* Tab 1: Modern Analytics Waves & Radial Speedometer */}
       {activeTab === 'OVERVIEW' && (
         <div className="space-y-6">
-          {/* Middle Row: Dual-Curve Wave Chart (Left) + Semi-Circle Gauge (Right) */}
+          {/* Middle Row: Employment Trends (50%) + Verification Status (50%) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-            <div className="lg:col-span-8">
+            <div className="lg:col-span-6">
               <EmploymentTrendChart />
             </div>
-            <div className="lg:col-span-4">
-              <EmploymentGauge 
-                percentage={employedPercentage}
-                label="Employment Placement Rate"
-                sublabel={isSuperadmin ? 'City-wide target: 75%' : `Brgy. ${selectedBarangay} target: 70%`}
-              />
+            <div className="lg:col-span-6">
+              <VerificationStatusChart />
             </div>
           </div>
 

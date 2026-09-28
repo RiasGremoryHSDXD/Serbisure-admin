@@ -9,8 +9,9 @@ export default defineConfig({
     open: false,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: 'https://serbisure-backend-rho.vercel.app',
         changeOrigin: true,
+        secure: true,
       }
     }
   }

@@ -14,9 +14,11 @@ import {
   Trash2,
   XCircle,
   History,
-  ShieldCheck
+  ShieldCheck,
+  Download
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
+import type { BookingCompliance, VerificationRequest, AuditLogEntry } from '../../types/admin';
 
 const ITEMS_PER_PAGE = 5;
 
@@ -78,6 +80,254 @@ function formatDocType(type?: string | null): string {
   return type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
+function escapeHtml(val: unknown): string {
+  if (val == null) return '';
+  return String(val)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getDeploymentStatusPill(status: string): string {
+  const s = (status || '').toUpperCase();
+  let style = 'background:#f4f4f5;color:#3f3f46;';
+  if (s.includes('COMPLIANT')) {
+    style = 'background:#d1fae5;color:#065f46;';
+  } else if (s.includes('BELOW_MINIMUM_WAGE') || s.includes('BELOW')) {
+    style = 'background:#ffe4e6;color:#9f1239;';
+  } else if (s.includes('FLAGGED') || s.includes('THROTTLED')) {
+    style = 'background:#fef3c7;color:#92400e;';
+  } else if (s.includes('ACTIVE')) {
+    style = 'background:#dbeafe;color:#1e40af;';
+  }
+  return `<span class="pill" style="${style}">${escapeHtml(status || 'Pending')}</span>`;
+}
+
+function getVerificationStatusPill(status: string): string {
+  const s = (status || '').toUpperCase();
+  if (s.includes('VERIFIED') || s.includes('APPROVED')) {
+    return `<span class="pill" style="background:#d1fae5;color:#065f46;">Verified</span>`;
+  }
+  if (s.includes('REJECTED')) {
+    return `<span class="pill" style="background:#ffe4e6;color:#9f1239;">Rejected</span>`;
+  }
+  if (s.includes('PENDING') || s.includes('REVIEW')) {
+    return `<span class="pill" style="background:#fef3c7;color:#92400e;">In Review</span>`;
+  }
+  return `<span class="pill" style="background:#f4f4f5;color:#3f3f46;">${escapeHtml(status || 'Pending')}</span>`;
+}
+
+function getAuditActionPill(action: string): string {
+  const a = (action || '').toUpperCase();
+  let style = 'background:#f4f4f5;color:#3f3f46;';
+  if (a.includes('APPROV') || a.includes('VERIF')) {
+    style = 'background:#d1fae5;color:#065f46;';
+  } else if (a.includes('REJECT') || a.includes('DELET')) {
+    style = 'background:#ffe4e6;color:#9f1239;';
+  } else if (a.includes('RESET')) {
+    style = 'background:#fef3c7;color:#92400e;';
+  } else if (a.includes('UPLOAD')) {
+    style = 'background:#e0f2fe;color:#0369a1;';
+  }
+  return `<span class="pill" style="${style}">${escapeHtml(action || 'ACTION')}</span>`;
+}
+
+function buildPdfReport(
+  tab: 'DEPLOYMENTS' | 'VERIFICATIONS' | 'AUDIT_TRAIL',
+  filteredBookings: BookingCompliance[],
+  filteredVerifications: VerificationRequest[],
+  filteredAuditLogs: AuditLogEntry[],
+  meta: { barangay: string; generatedAt: string; searchTerm: string }
+): string {
+  let title = '';
+  let count = 0;
+  let tableHeaders = '';
+  let tableRows = '';
+
+  if (tab === 'DEPLOYMENTS') {
+    title = 'Placement & Bookings Compliance Report';
+    count = filteredBookings.length;
+    tableHeaders = `
+      <th style="width:40px;">#</th>
+      <th>Employer</th>
+      <th>Kasambahay / Worker</th>
+      <th>Monthly Wage</th>
+      <th>Contract Type</th>
+      <th>Status</th>
+    `;
+    tableRows = filteredBookings.map((b, idx) => {
+      const employerName = b.homeownerName || 'Unassigned';
+      const employerSub = b.barangay ? `Barangay ${b.barangay}` : '';
+      const workerName = b.workerName || 'Unassigned';
+      const workerSub = b.serviceCategory || '';
+      const wageDisplay = b.offeredWage != null ? `₱${Number(b.offeredWage).toLocaleString()} / mo` : '—';
+      const contract = b.contractType || '—';
+      const contractDisplay = contract.includes('Formal')
+        ? 'Formal (Long-Term)'
+        : contract.includes('Short')
+        ? 'Short-Term'
+        : contract;
+      const rawStatus = b.bookingStatus || b.status || 'Pending';
+
+      return `
+        <tr>
+          <td style="color:#71717a;font-weight:700;">${idx + 1}</td>
+          <td>
+            <span class="name-bold">${escapeHtml(employerName)}</span>
+            ${employerSub ? `<span class="sub-text">${escapeHtml(employerSub)}</span>` : ''}
+          </td>
+          <td>
+            <span class="name-bold">${escapeHtml(workerName)}</span>
+            ${workerSub ? `<span class="sub-text">${escapeHtml(workerSub)}</span>` : ''}
+          </td>
+          <td style="font-weight:700;color:#0D0D11;">${escapeHtml(wageDisplay)}</td>
+          <td>${escapeHtml(contractDisplay)}</td>
+          <td>${getDeploymentStatusPill(rawStatus)}</td>
+        </tr>
+      `;
+    }).join('');
+  } else if (tab === 'VERIFICATIONS') {
+    title = 'Clearance & Document Verification Report';
+    count = filteredVerifications.length;
+    tableHeaders = `
+      <th style="width:40px;">#</th>
+      <th>Applicant</th>
+      <th>Role</th>
+      <th>Document Type</th>
+      <th>Barangay</th>
+      <th>Submitted Date</th>
+      <th>Status</th>
+    `;
+    tableRows = filteredVerifications.map((v, idx) => {
+      const applicantName = v.name || '—';
+      const applicantSub = v.documentNumber ? `Doc #: ${v.documentNumber}` : '';
+      const roleDisplay = v.role === 'KASAMBAHAY' ? 'Kasambahay' : v.role === 'HOMEOWNER' ? 'Homeowner' : (v.role || '—');
+      const docDisplay = formatDocType(v.documentType);
+      const brgyDisplay = v.barangay || '—';
+      const dateDisplay = v.submittedDate || '—';
+      const rawStatus = v.status || 'Pending';
+
+      return `
+        <tr>
+          <td style="color:#71717a;font-weight:700;">${idx + 1}</td>
+          <td>
+            <span class="name-bold">${escapeHtml(applicantName)}</span>
+            ${applicantSub ? `<span class="sub-text">${escapeHtml(applicantSub)}</span>` : ''}
+          </td>
+          <td>${escapeHtml(roleDisplay)}</td>
+          <td>${escapeHtml(docDisplay)}</td>
+          <td>${escapeHtml(brgyDisplay)}</td>
+          <td>${escapeHtml(dateDisplay)}</td>
+          <td>${getVerificationStatusPill(rawStatus)}</td>
+        </tr>
+      `;
+    }).join('');
+  } else if (tab === 'AUDIT_TRAIL') {
+    title = 'System Audit Trail Report';
+    count = filteredAuditLogs.length;
+    tableHeaders = `
+      <th style="width:40px;">#</th>
+      <th>Official / Actor</th>
+      <th>Action</th>
+      <th>Resident & Document</th>
+      <th>Status Change</th>
+      <th>Reason</th>
+      <th>Timestamp</th>
+    `;
+    tableRows = filteredAuditLogs.map((a, idx) => {
+      const actorName = a.actor_name || 'System';
+      const actorSub = [a.actor_role, a.actor_barangay].filter(Boolean).join(' • ') || 'System Admin';
+      const actionPill = getAuditActionPill(a.action);
+      const targetName = a.target_name || '—';
+      const targetSub = [formatDocType(a.document_type), a.target_barangay].filter(Boolean).join(' • ') || '—';
+      const statusChange = (a.previous_status || a.new_status)
+        ? `${a.previous_status || 'Pending'} → ${a.new_status || 'Updated'}`
+        : '—';
+      const rawReason = a.reason || '—';
+      const reasonDisplay = rawReason.length > 60 ? rawReason.slice(0, 60) + '...' : rawReason;
+      const timeDisplay = formatAuditDate(a.created_at);
+      const logSub = a.log_id ? `Log #${String(a.log_id).slice(-6)}` : '';
+
+      return `
+        <tr>
+          <td style="color:#71717a;font-weight:700;">${idx + 1}</td>
+          <td>
+            <span class="name-bold">${escapeHtml(actorName)}</span>
+            <span class="sub-text">${escapeHtml(actorSub)}</span>
+          </td>
+          <td>${actionPill}</td>
+          <td>
+            <span class="name-bold">${escapeHtml(targetName)}</span>
+            <span class="sub-text">${escapeHtml(targetSub)}</span>
+          </td>
+          <td style="font-weight:600;color:#27272a;">${escapeHtml(statusChange)}</td>
+          <td style="color:#52525b;max-width:200px;">${escapeHtml(reasonDisplay)}</td>
+          <td>
+            <span class="name-bold">${escapeHtml(timeDisplay)}</span>
+            ${logSub ? `<span class="sub-text">${escapeHtml(logSub)}</span>` : ''}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    @page { size: landscape; margin: 12mm; }
+    body { font-family: system-ui,-apple-system,sans-serif; background:#F6F5F2; margin:0; padding:20px; color:#0D0D11; }
+    .header { margin-bottom:24px; border-bottom:2px solid #FFB380; padding-bottom:16px; }
+    .sys-name { font-size:11px; font-weight:700; color:#FFB380; text-transform:uppercase; letter-spacing:2px; }
+    .report-title { font-size:24px; font-weight:900; color:#0D0D11; margin:4px 0; }
+    .meta { font-size:12px; color:#52525b; margin:2px 0; }
+    .meta-filter { color:#d97706; font-style:italic; }
+    table { width:100%; border-collapse:collapse; font-size:12px; background:white; border-radius:8px; overflow:hidden; }
+    thead tr { background:#0D0D11; color:white; }
+    th { padding:10px 12px; text-align:left; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap; }
+    td { padding:10px 12px; border-bottom:1px solid #f4f4f5; vertical-align:top; }
+    tr:last-child td { border-bottom:none; }
+    tr:nth-child(even) { background:#fafafa; }
+    .pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; }
+    .name-bold { font-weight:700; display:block; }
+    .sub-text { font-size:10px; color:#71717a; display:block; margin-top:2px; }
+    .footer { margin-top:24px; padding-top:12px; border-top:1px solid #e4e4e7; display:flex; justify-content:space-between; font-size:10px; color:#71717a; }
+    @media print { body { background:white; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="sys-name">SerbiSure LGU Dashboard</div>
+    <div class="report-title">${escapeHtml(title)}</div>
+    <div class="meta">Barangay: <strong>${escapeHtml(meta.barangay)}</strong></div>
+    <div class="meta">Generated: <strong>${escapeHtml(meta.generatedAt)}</strong></div>
+    <div class="meta">Records exported: <strong>${count}</strong></div>
+    ${meta.searchTerm ? `<div class="meta meta-filter">Search filter: &laquo;${escapeHtml(meta.searchTerm)}&raquo;</div>` : ''}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        ${tableHeaders}
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows || '<tr><td colspan="7" style="text-align:center;padding:24px;color:#71717a;">No records found</td></tr>'}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <span>This report is auto-generated by SerbiSure and is for official LGU use only.</span>
+    <span>Page 1 of 1</span>
+  </div>
+</body>
+</html>`;
+}
+
 export const DashboardActivityTable: React.FC = () => {
   const { verifications, bookings, auditLogs, isLoadingDashboardActivity, isLoadingAuditLogs, setActiveNav, currentRole, selectedBarangay } = useAdmin();
   const [activeTab, setActiveTab] = useState<'DEPLOYMENTS' | 'VERIFICATIONS' | 'AUDIT_TRAIL'>('DEPLOYMENTS');
@@ -85,6 +335,7 @@ export const DashboardActivityTable: React.FC = () => {
   const [bookingsPage, setBookingsPage] = useState(1);
   const [verificationsPage, setVerificationsPage] = useState(1);
   const [auditPage, setAuditPage] = useState(1);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   // Scope to assigned barangay if logged in as local LGU officer
   const scopedVerifications = useMemo(() => {
@@ -265,6 +516,53 @@ export const DashboardActivityTable: React.FC = () => {
     );
   };
 
+  const handleExport = () => {
+    const isEmpty = 
+      (activeTab === 'DEPLOYMENTS' && filteredBookings.length === 0) ||
+      (activeTab === 'VERIFICATIONS' && filteredVerifications.length === 0) ||
+      (activeTab === 'AUDIT_TRAIL' && filteredAuditLogs.length === 0);
+
+    if (isEmpty) {
+      setExportMessage('No data to export for the current filters.');
+      setTimeout(() => setExportMessage(null), 3000);
+      return;
+    }
+
+    const barangay = selectedBarangay || 'All Barangays';
+    const generatedAt = new Date().toLocaleString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
+    const htmlString = buildPdfReport(
+      activeTab,
+      filteredBookings,
+      filteredVerifications,
+      filteredAuditLogs,
+      { barangay, generatedAt, searchTerm }
+    );
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setExportMessage('Please allow pop-ups for this site to download the PDF.');
+      setTimeout(() => setExportMessage(null), 4000);
+      return;
+    }
+    printWindow.document.write(htmlString);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+
+    setExportMessage('PDF report opened — use "Save as PDF" in the print dialog.');
+    setTimeout(() => setExportMessage(null), 4000);
+  };
+
+  const isExportWarning = Boolean(exportMessage && (exportMessage.startsWith('No data') || exportMessage.startsWith('Please allow')));
+
   return (
     <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-xs border border-zinc-100/80">
       {/* Top Tabs & Controls Bar */}
@@ -329,6 +627,16 @@ export const DashboardActivityTable: React.FC = () => {
 
           <button
             type="button"
+            onClick={handleExport}
+            title="Download current tab as PDF"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#F0F0EC] hover:bg-[#EAEAE5] text-zinc-700 rounded-full text-xs font-bold transition-all cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-zinc-600" />
+            <span>Export</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveNav('verifications')}
             className="flex items-center gap-1 px-4 py-1.5 bg-[#FFB380] hover:bg-[#F5A066] text-white rounded-full text-xs font-black font-display transition-transform active:scale-95 cursor-pointer"
           >
@@ -337,6 +645,24 @@ export const DashboardActivityTable: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Export notification toast */}
+      {exportMessage && (
+        <div
+          className={`flex items-center gap-2 text-xs font-medium px-4 py-2 rounded-xl mb-3 transition-all ${
+            isExportWarning
+              ? 'bg-amber-50 text-amber-800 border border-amber-200/60'
+              : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+          }`}
+        >
+          {isExportWarning ? (
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          )}
+          <span>{exportMessage}</span>
+        </div>
+      )}
 
       {/* Table Content */}
       <div className="overflow-x-auto mt-2">
