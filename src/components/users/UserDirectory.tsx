@@ -3,7 +3,6 @@ import {
   CheckCircle, 
   ChevronDown,
   MapPin, 
-  Star,
   RotateCw,
   MessageSquare,
   Send,
@@ -143,6 +142,49 @@ function formatChatDate(dateStr?: string): string {
     return dateStr;
   }
 }
+
+const UserAvatar: React.FC<{
+  src?: string | null;
+  name?: string;
+  sizeClass?: string;
+  textClass?: string;
+}> = ({
+  src,
+  name = '',
+  sizeClass = 'w-12 h-12 min-w-[48px] min-h-[48px]',
+  textClass = 'font-black text-sm text-zinc-600 font-display',
+}) => {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [src]);
+
+  const cleanName = (name || '').trim();
+  const getInitials = (n: string) => {
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '??';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+  const initials = getInitials(cleanName);
+  const optimizedUrl = src ? getOptimizedWebpUrl(src, { width: 128, height: 128, crop: 'fill', quality: 'auto' }) : null;
+
+  return (
+    <div className={`${sizeClass} rounded-full overflow-hidden bg-zinc-200 flex items-center justify-center shrink-0 select-none`}>
+      {optimizedUrl && !imgFailed ? (
+        <img
+          src={optimizedUrl}
+          alt={name || 'Avatar'}
+          className="w-full h-full object-cover"
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        <span className={textClass}>{initials}</span>
+      )}
+    </div>
+  );
+};
 
 export const UserDirectory: React.FC = () => {
   const { users, refreshUsers, isLoadingUsers, currentRole, selectedBarangay, userBarangays, currentUser } = useAdmin();
@@ -626,22 +668,12 @@ export const UserDirectory: React.FC = () => {
                       }`}
                     >
                       {/* Avatar */}
-                      <div className="w-12 h-12 min-w-[48px] min-h-[48px] rounded-full overflow-hidden bg-zinc-200 flex items-center justify-center shrink-0">
-                        {user.avatar ? (
-                          <img
-                            src={user.avatar}
-                            alt={user.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <span className="font-black text-sm text-zinc-600 font-display">
-                            {user.name.slice(0, 2).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
+                      <UserAvatar
+                        src={user.avatar}
+                        name={user.name}
+                        sizeClass="w-12 h-12 min-w-[48px] min-h-[48px]"
+                        textClass="font-black text-sm text-zinc-600 font-display"
+                      />
 
                       {/* Name + badges */}
                       <div className="flex-1 min-w-0">
@@ -711,22 +743,12 @@ export const UserDirectory: React.FC = () => {
               {/* Header */}
               <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between shrink-0 bg-white">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full overflow-hidden shrink-0 bg-zinc-200 flex items-center justify-center">
-                    {threadPartner?.avatar ? (
-                      <img
-                        src={threadPartner.avatar}
-                        alt={threadPartner.name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <span className="font-black text-xs text-zinc-600 font-display">
-                        {(threadPartner?.name || 'U').slice(0, 2).toUpperCase()}
-                      </span>
-                    )}
-                  </div>
+                  <UserAvatar
+                    src={threadPartner?.avatar}
+                    name={threadPartner?.name || 'User'}
+                    sizeClass="w-10 h-10 min-w-[40px] min-h-[40px]"
+                    textClass="font-black text-xs text-zinc-600 font-display"
+                  />
                   <div className="min-w-0">
                     <h4 className="text-sm font-black font-display text-[#0D0D11] truncate">
                       {threadPartner?.name}
@@ -1067,22 +1089,12 @@ export const UserDirectory: React.FC = () => {
               <div className="space-y-5">
                 {/* Header: Centered Avatar, Name with Verified Badge, Address */}
                 <div className="flex flex-col items-center text-center gap-2.5">
-                  <div className="w-16 h-16 min-w-[64px] min-h-[64px] max-w-[64px] max-h-[64px] rounded-full overflow-hidden shrink-0 bg-zinc-200 flex items-center justify-center">
-                    {selectedUser.avatar ? (
-                      <img
-                        src={selectedUser.avatar}
-                        alt={selectedUser.name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <span className="font-black text-lg text-zinc-600 font-display">
-                        {selectedUser.name.slice(0, 2).toUpperCase()}
-                      </span>
-                    )}
-                  </div>
+                  <UserAvatar
+                    src={selectedUser.avatar}
+                    name={selectedUser.name}
+                    sizeClass="w-16 h-16 min-w-[64px] min-h-[64px] max-w-[64px] max-h-[64px]"
+                    textClass="font-black text-lg text-zinc-600 font-display"
+                  />
                   <div className="space-y-1 min-w-0 w-full">
                     <div className="flex items-center justify-center gap-1.5">
                       <h3 className="text-base font-black font-display text-[#0D0D11] tracking-tight truncate">
@@ -1157,77 +1169,6 @@ export const UserDirectory: React.FC = () => {
                   </div>
                 </div>
               </div>
-
-              {/* Linked Kasambahays (Homeowner only) */}
-              {selectedUser.role === 'HOMEOWNER' && (
-                <div className="space-y-4 pt-4 border-t border-zinc-100">
-                  <h4 className="text-base font-black font-display text-[#0D0D11] tracking-tight">
-                    Linked Kasambahays
-                  </h4>
-
-                  {selectedUser.linkedKasambahays && selectedUser.linkedKasambahays.length > 0 ? (
-                    <div className="space-y-3">
-                      {selectedUser.linkedKasambahays.map((worker) => (
-                        <div
-                          key={worker.id}
-                          className="bg-[#FAFAFA] rounded-2xl p-4 flex items-center justify-between border border-zinc-200/70 transition-all"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full overflow-hidden shrink-0 bg-zinc-200 flex items-center justify-center">
-                              {worker.avatar ? (
-                                <img
-                                  src={worker.avatar}
-                                  alt={worker.name}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <span className="font-bold text-xs text-zinc-600">
-                                  {worker.name.slice(0, 2).toUpperCase()}
-                                </span>
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-black font-display text-[#0D0D11] text-xs truncate">
-                                  {worker.name}
-                                </span>
-                                {worker.verified && (
-                                  <CheckCircle className="w-3.5 h-3.5 fill-emerald-600 text-white shrink-0" />
-                                )}
-                              </div>
-                              <div className="text-[11px] text-zinc-400 font-medium truncate">
-                                {worker.role}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
-                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-black font-display">
-                              <Star className="w-3 h-3 fill-emerald-600 text-emerald-600" />
-                              <span>{worker.rating.toFixed(1)}</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setActiveTab('KASAMBAHAY');
-                                setMessageThreadUserId(null);
-                                setSelectedUserId(worker.id || 'usr-kasambahay-1');
-                              }}
-                              className="text-[10px] font-bold text-zinc-500 hover:text-zinc-950 transition-colors cursor-pointer"
-                            >
-                              View
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-5 bg-[#FAFAFA] rounded-2xl border border-zinc-200/70 text-center text-zinc-400 text-xs font-medium">
-                      No active linked Kasambahay contracts for this homeowner.
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* Social Media Section (Homeowner & Kasambahay) */}
               <div className="space-y-4 pt-4 border-t border-zinc-100">
