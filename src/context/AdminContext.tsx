@@ -295,7 +295,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ? (selectedBarangay === 'All Barangays' ? undefined : selectedBarangay) 
         : selectedBarangay;
       const liveUsers = await fetchRegisteredUsers(undefined, bgyParam);
-      setUsers(liveUsers || []);
+      const mappedUsers = (liveUsers || []).map((u) => ({
+        ...u,
+        socialLinks: Array.isArray(u.socialLinks) ? u.socialLinks : [],
+      }));
+      setUsers(mappedUsers);
     } catch (err) {
       console.warn('[Admin API] Users fetch notice:', err);
     } finally {

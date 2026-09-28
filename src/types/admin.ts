@@ -131,6 +131,13 @@ export interface LinkedWorker {
   verified: boolean;
 }
 
+export interface SocialLink {
+  platform: string;
+  platform_name?: string;
+  url: string;
+  handle?: string;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -149,6 +156,7 @@ export interface UserProfile {
   joinedDate: string;
   completedJobs: number;
   linkedKasambahays?: LinkedWorker[];
+  socialLinks?: SocialLink[];
   sentimentScore: {
     positive: number;
     neutral: number;
