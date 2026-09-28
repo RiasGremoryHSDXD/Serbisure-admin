@@ -207,3 +207,32 @@ export interface AuditLogEntry {
   metadata?: Record<string, any>;
   created_at: string;
 }
+
+export interface ChatMessage {
+  chat_message_id: string;
+  sender_id: string;
+  receiver_id: string;
+  message_payload: string | null;
+  message_type: 'text' | 'image';
+  is_read: boolean;
+  createdAt: string;
+  image_url?: string | null;
+  reaction_summary?: Record<string, number>;
+  my_reaction?: string | null;
+}
+
+export interface ChatThreadResponse {
+  data?: ChatMessage[];
+  results?: ChatMessage[];   // DRF pagination wrapper
+  count?: number;
+}
+
+export interface ChatInboxEntry {
+  partner_id: string;
+  partner_name: string;
+  partner_account_type: string;
+  last_message: string;
+  last_message_time: string;   // ISO 8601
+  unread_count: number;
+  sent_count: number;
+}

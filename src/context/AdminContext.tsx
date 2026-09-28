@@ -483,6 +483,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (match) {
       const user: AdminUser = {
+        id: match.username,
         username: match.username,
         name: match.name,
         role: match.role,
