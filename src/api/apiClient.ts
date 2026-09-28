@@ -84,9 +84,10 @@ export async function fetchApi<T>(endpoint: string, options: FetchApiOptions = {
 
       // Handle HTTP errors
       if (!response.ok) {
-        // If an endpoint returns 404 on Vercel cloud (e.g. newly added feature running on local backend),
-        // gracefully attempt the local backend if reachable
-        if (response.status === 404 && isCloudBackend()) {
+        // If an endpoint returns 404 OR a 5xx server error on Vercel cloud,
+        // gracefully attempt the local backend if reachable (e.g. newly added
+        // feature, or a cloud-only NameError like the inbox public_id bug)
+        if ((response.status === 404 || response.status >= 500) && isCloudBackend()) {
           try {
             const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
             const localFallbackUrl = `http://127.0.0.1:8000${cleanPath}`;
