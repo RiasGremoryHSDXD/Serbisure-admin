@@ -885,49 +885,59 @@ export const UserDirectory: React.FC = () => {
                             >
                               {/* Bubble Container + Hover Emoji Reaction Bar */}
                               <div className={`relative flex items-center gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                                <div
-                                  title={formatChatDate(msg.createdAt)}
-                                  className={`max-w-[85%] sm:max-w-[460px] rounded-2xl px-4 py-2.5 text-xs font-medium break-words shadow-2xs ${
-                                    isMe
-                                      ? 'bg-[#0D0D11] text-white rounded-br-xs'
-                                      : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
-                                  }`}
-                                >
-                                  {msg.message_type === 'image' ? (
-                                    <div className="space-y-1.5">
-                                      {msg.image_url ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => setLightboxUrl(msg.image_url!)}
-                                          className="group relative block overflow-hidden rounded-xl cursor-pointer focus:outline-none"
-                                          title="Click to expand image"
-                                        >
-                                          <img
-                                            src={getOptimizedWebpUrl(msg.image_url, { quality: 'auto' })}
-                                            alt="Chat attachment"
-                                            className="max-w-[280px] max-h-[280px] rounded-xl object-cover transition-transform duration-200 group-hover:scale-105"
-                                            loading="lazy"
-                                          />
-                                          <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl text-white">
-                                            <ZoomIn className="w-5 h-5 drop-shadow" />
-                                          </div>
-                                        </button>
-                                      ) : (
-                                        <div className="flex items-center gap-2 p-3 bg-zinc-200/50 rounded-xl text-zinc-500 text-xs">
-                                          <ImageIcon className="w-5 h-5 text-zinc-400 shrink-0" />
-                                          <span>Image unavailable</span>
+                                {msg.message_type === 'image' ? (
+                                  /* Facebook Messenger style: Standalone borderless image without outer bubble box */
+                                  <div className={`flex flex-col gap-1.5 ${isMe ? 'items-end' : 'items-start'}`}>
+                                    {msg.image_url ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setLightboxUrl(msg.image_url!)}
+                                        className="group relative block overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer focus:outline-none border border-black/5 bg-transparent p-0"
+                                        title="Click to expand image"
+                                      >
+                                        <img
+                                          src={getOptimizedWebpUrl(msg.image_url, { quality: 'auto' })}
+                                          alt="Chat attachment"
+                                          className="max-w-[260px] sm:max-w-[320px] max-h-[380px] w-auto h-auto rounded-2xl object-cover transition-transform duration-200 group-hover:scale-[1.02] block"
+                                          loading="lazy"
+                                        />
+                                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl text-white">
+                                          <ZoomIn className="w-6 h-6 drop-shadow" />
                                         </div>
-                                      )}
-                                      {msg.message_payload && (
-                                        <p className="text-xs break-words leading-relaxed pt-0.5">
-                                          {msg.message_payload}
-                                        </p>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    msg.message_payload
-                                  )}
-                                </div>
+                                      </button>
+                                    ) : (
+                                      <div className="flex items-center gap-2 p-3 bg-zinc-100 rounded-2xl text-zinc-500 text-xs border border-zinc-200">
+                                        <ImageIcon className="w-5 h-5 text-zinc-400 shrink-0" />
+                                        <span>Image unavailable</span>
+                                      </div>
+                                    )}
+
+                                    {/* Optional caption below image */}
+                                    {msg.message_payload && (
+                                      <div
+                                        className={`max-w-[85%] sm:max-w-[320px] rounded-2xl px-4 py-2 text-xs font-medium break-words shadow-2xs ${
+                                          isMe
+                                            ? 'bg-[#0D0D11] text-white rounded-br-xs'
+                                            : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
+                                        }`}
+                                      >
+                                        {msg.message_payload}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  /* Standard text message bubble */
+                                  <div
+                                    title={formatChatDate(msg.createdAt)}
+                                    className={`max-w-[85%] sm:max-w-[460px] rounded-2xl px-4 py-2.5 text-xs font-medium break-words shadow-2xs ${
+                                      isMe
+                                        ? 'bg-[#0D0D11] text-white rounded-br-xs'
+                                        : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
+                                    }`}
+                                  >
+                                    {msg.message_payload}
+                                  </div>
+                                )}
 
                                 {/* Floating Facebook-style Emoji Reaction Bar on Hover */}
                                 <div
