@@ -230,14 +230,59 @@ export const UserDirectory: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showEmojiPicker]);
 
-  // Load inbox on mount, then poll every 6 s (well under the 60/min throttle).
+  // Load inbox on mount, then poll every 5 s (well under the 60/min throttle).
+  // Also silently refreshes the currently open thread so new incoming messages appear automatically.
   // Pauses automatically when the tab is hidden to avoid wasting quota.
+  const messageThreadUserIdRef = useRef<string | null>(messageThreadUserId);
+  messageThreadUserIdRef.current = messageThreadUserId;
+
+  const refreshActiveThread = async (userId: string) => {
+    if (!userId || isChatLoading) return;
+    try {
+      const msgs = await fetchChatThread(userId);
+      setChatMessages((prev) => {
+        // Compare length or latest message ID or reaction changes before updating
+        const prevLen = prev.length;
+        const newLen = msgs.length;
+        const prevLastId = prevLen > 0 ? prev[prevLen - 1].chat_message_id : null;
+        const newLastId = newLen > 0 ? msgs[newLen - 1].chat_message_id : null;
+
+        if (prevLen !== newLen || prevLastId !== newLastId) {
+          return msgs;
+        }
+
+        // Check if any reactions changed
+        const reactionsChanged = prev.some((m, idx) => {
+          const newM = msgs[idx];
+          if (!newM) return true;
+          return JSON.stringify(m.reaction_summary) !== JSON.stringify(newM.reaction_summary) || m.my_reaction !== newM.my_reaction;
+        });
+
+        if (reactionsChanged) {
+          return msgs;
+        }
+
+        return prev;
+      });
+
+      // Mark any incoming unread messages as read
+      msgs
+        .filter((m) => !m.is_read && m.receiver_id !== userId)
+        .forEach((m) => markMessageRead(m.chat_message_id).catch(() => {}));
+    } catch {
+      // Silent catch for background poll to avoid interrupting the user
+    }
+  };
+
   useEffect(() => {
     loadInbox();
-    const POLL_INTERVAL_MS = 6000;
+    const POLL_INTERVAL_MS = 5000;
     const interval = setInterval(() => {
       if (!document.hidden) {
         loadInbox();
+        if (messageThreadUserIdRef.current) {
+          refreshActiveThread(messageThreadUserIdRef.current);
+        }
       }
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
