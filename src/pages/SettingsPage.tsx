@@ -18,16 +18,17 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAdmin } from '../context/AdminContext';
-import type { BarangayDeskProfile, BarangayStats } from '../types/admin';
+import type { BarangayDeskProfile, BarangayStats, VerificationRequest } from '../types/admin';
 import { 
   changePasswordApi, 
   fetchDeskProfileApi, 
   updateDeskProfileApi,
-  fetchDashboardStats
+  fetchDashboardStats,
+  fetchVerificationQueue
 } from '../api/adminApi';
 
 export const SettingsPage: React.FC = () => {
-  const { currentRole, currentUser, selectedBarangay, barangays, addBarangay, verifications, users } = useAdmin();
+  const { currentRole, currentUser, selectedBarangay, barangays, addBarangay, verifications } = useAdmin();
 
   // ---------------------------------------------------------
   // Change Password Form State (Shared for Superadmin & Admin)
@@ -120,10 +121,12 @@ export const SettingsPage: React.FC = () => {
   // Live Barangay Metrics (Workforce + Verification Breakdown)
   // ---------------------------------------------------------
   const [liveBarangayStats, setLiveBarangayStats] = useState<Record<string, BarangayStats>>({});
+  const [queueVerifications, setQueueVerifications] = useState<VerificationRequest[]>([]);
   const isSuperAdmin = currentRole === 'SUPERADMIN';
 
   useEffect(() => {
     if (isSuperAdmin) {
+      // 1. Fetch workforce metrics from dashboard stats
       fetchDashboardStats()
         .then((res) => {
           if (res && Array.isArray(res.barangays) && res.barangays.length > 0) {
@@ -135,6 +138,15 @@ export const SettingsPage: React.FC = () => {
           }
         })
         .catch(() => {});
+
+      // 2. Fetch directly from the Verification Queue API (same source of truth as Verifications tab)
+      fetchVerificationQueue()
+        .then((queue) => {
+          if (Array.isArray(queue)) {
+            setQueueVerifications(queue);
+          }
+        })
+        .catch(() => {});
     }
   }, [isSuperAdmin]);
 
@@ -142,54 +154,35 @@ export const SettingsPage: React.FC = () => {
     const key = b.name.toLowerCase();
     const live = liveBarangayStats[key];
 
-    if (live && live.totalRegistered !== undefined) {
-      return {
-        totalRegistered: live.totalRegistered,
-        pending: live.pending ?? 0,
-        verified: live.verified ?? 0,
-        rejected: live.rejected ?? 0,
-        noDocuments: live.noDocuments ?? 0,
-        employed: live.employed ?? 0,
-        available: live.available ?? 0,
-        employmentRatio: live.employmentRatio ?? 0,
-      };
-    }
-
-    if (b.totalRegistered !== undefined) {
-      return {
-        totalRegistered: b.totalRegistered,
-        pending: b.pending ?? 0,
-        verified: b.verified ?? 0,
-        rejected: b.rejected ?? 0,
-        noDocuments: b.noDocuments ?? 0,
-        employed: b.employed ?? 0,
-        available: b.available ?? 0,
-        employmentRatio: b.employmentRatio ?? 0,
-      };
-    }
-
-    // Dynamic fallback computation from verifications & users arrays in AdminContext
+    // Source of truth: Derive verification breakdown directly from the Verification Queue
     const cleanName = b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
-    const bVerifs = verifications.filter((v) => {
+    const allQueue = queueVerifications.length > 0 ? queueVerifications : verifications;
+
+    const bVerifs = allQueue.filter((v) => {
       const vBgy = (v.barangay || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
-      return vBgy === cleanName || vBgy.includes(cleanName);
-    });
-    const bUsers = users.filter((u) => {
-      const uBgy = (u.barangay || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
-      return uBgy === cleanName || uBgy.includes(cleanName);
+      return vBgy === cleanName || vBgy.includes(cleanName) || cleanName.includes(vBgy);
     });
 
-    const pending = bVerifs.filter((v) => v.status === 'PENDING / REVIEW').length;
-    const verified = bVerifs.filter((v) => v.status === 'VERIFIED').length;
-    const rejected = bVerifs.filter((v) => v.status === 'REJECTED').length;
-    const noDocuments = bVerifs.filter((v) => v.status === 'NO_DOCUMENTS').length;
-    const totalRegistered = Math.max(bUsers.length, bVerifs.length, b.totalWorkers);
+    const hasQueueData = bVerifs.length > 0;
+    const pending = hasQueueData
+      ? bVerifs.filter((v) => v.status === 'PENDING / REVIEW').length
+      : (live?.pending ?? b.pending ?? 0);
+    const verified = hasQueueData
+      ? bVerifs.filter((v) => v.status === 'VERIFIED').length
+      : (live?.verified ?? b.verified ?? 0);
+    const rejected = hasQueueData
+      ? bVerifs.filter((v) => v.status === 'REJECTED').length
+      : (live?.rejected ?? b.rejected ?? 0);
+    const noDocuments = hasQueueData
+      ? bVerifs.filter((v) => v.status === 'NO_DOCUMENTS').length
+      : (live?.noDocuments ?? b.noDocuments ?? 0);
+    const totalRegistered = hasQueueData
+      ? bVerifs.length
+      : (live?.totalRegistered ?? b.totalRegistered ?? 0);
 
-    const bKasambahays = bUsers.filter((u) => u.role === 'KASAMBAHAY');
-    const totalWorkers = b.totalWorkers > 0 ? b.totalWorkers : bKasambahays.length;
-    const employed = b.employed > 0 ? b.employed : 0;
-    const available = b.available > 0 ? b.available : Math.max(0, totalWorkers - employed);
-    const employmentRatio = b.employmentRatio > 0 ? b.employmentRatio : (totalWorkers > 0 ? Math.round((employed / totalWorkers) * 100) : 0);
+    const employed = live?.employed ?? b.employed ?? 0;
+    const available = live?.available ?? b.available ?? 0;
+    const employmentRatio = live?.employmentRatio ?? b.employmentRatio ?? 0;
 
     return {
       totalRegistered,
