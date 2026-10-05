@@ -8,6 +8,13 @@ export type VerificationStatus = 'PENDING / REVIEW' | 'VERIFIED' | 'REJECTED' | 
 
 export interface BarangayStats {
   name: string;
+  region?: string;
+  province?: string;
+  city?: string;
+  street?: string;
+  contact_number?: string;
+  zipcode?: string;
+  country?: string;
   totalRegistered?: number;
   totalWorkers: number;
   employed: number;

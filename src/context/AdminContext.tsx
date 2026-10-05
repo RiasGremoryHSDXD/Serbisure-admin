@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { AdminRole, BarangayStats, VerificationRequest, UserProfile, BookingCompliance, DashboardMetrics, AuditLogEntry } from '../types/admin';
 import { BARANGAYS_DATA } from '../data/mockData';
-import { fetchVerificationQueue, reviewVerification, fetchRegisteredUsers, fetchDashboardStats, fetchDashboardActivity, fetchMonthlyTrend, MonthlyTrendPoint, adminLoginApi, fetchActiveLguBarangays, fetchAllUserBarangays, fetchAuditLogs } from '../api/adminApi';
+import { fetchVerificationQueue, reviewVerification, fetchRegisteredUsers, fetchDashboardStats, fetchDashboardActivity, fetchMonthlyTrend, MonthlyTrendPoint, adminLoginApi, fetchActiveLguBarangays, fetchAllUserBarangays, fetchAuditLogs, createActiveBarangayApi } from '../api/adminApi';
 
 export interface AdminUser {
   id?: string;
@@ -55,7 +55,7 @@ interface AdminContextType {
   refreshAuditLogs: () => Promise<void>;
 
   // Actions
-  addBarangay: (barangay: BarangayStats) => void;
+  addBarangay: (barangay: BarangayStats) => Promise<{ success: boolean; error?: string }>;
   approveVerification: (id: string) => Promise<void>;
   rejectVerification: (id: string, reason?: string) => Promise<void>;
   resetVerification: (id: string) => Promise<void>;
@@ -151,12 +151,41 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return BARANGAYS_DATA;
   });
 
-  const addBarangay = (newBarangay: BarangayStats) => {
+  const addBarangay = async (newBarangay: BarangayStats): Promise<{ success: boolean; error?: string }> => {
+    const cleanName = newBarangay.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+    const normalizedBarangay: BarangayStats = {
+      ...newBarangay,
+      name: cleanName,
+      status: 'ACTIVE',
+    };
+
+    // 1. Call backend API to persist to PostgreSQL database
+    try {
+      const res = await createActiveBarangayApi({
+        name: cleanName,
+        region: newBarangay.region,
+        province: newBarangay.province,
+        city: newBarangay.city,
+        street: newBarangay.street,
+        contact_number: newBarangay.contact_number,
+        zipcode: newBarangay.zipcode,
+        country: newBarangay.country,
+      });
+
+      if (res.error) {
+        return { success: false, error: res.error };
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save barangay to database.';
+      return { success: false, error: msg };
+    }
+
+    // 2. Update local state and localStorage
     setBarangays((prev) => {
-      const exists = prev.some((b) => b.name.toLowerCase() === newBarangay.name.toLowerCase());
+      const exists = prev.some((b) => b.name.toLowerCase() === cleanName.toLowerCase());
       const updated = exists
-        ? prev.map((b) => (b.name.toLowerCase() === newBarangay.name.toLowerCase() ? newBarangay : b))
-        : [...prev, newBarangay];
+        ? prev.map((b) => (b.name.toLowerCase() === cleanName.toLowerCase() ? normalizedBarangay : b))
+        : [...prev, normalizedBarangay];
       try {
         localStorage.setItem('serbisure_admin_barangays', JSON.stringify(updated));
       } catch (e) {
@@ -164,6 +193,10 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       return updated;
     });
+
+    // 3. Trigger refresh to sync canonical list from backend
+    await refreshLguBarangays();
+    return { success: true };
   };
 
   const [userBarangays, setUserBarangays] = useState<string[]>(() => {
@@ -358,12 +391,13 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setBarangays((prev) => {
           const prevMap = new Map(prev.map((b) => [b.name.toLowerCase(), b]));
           const asStats: BarangayStats[] = names.map((name) => {
-            const existing = prevMap.get(name.toLowerCase());
+            const clean = name.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+            const existing = prevMap.get(clean.toLowerCase()) || prevMap.get(name.toLowerCase());
             if (existing) {
-              return { ...existing, status: 'ACTIVE' as const };
+              return { ...existing, name: clean, status: 'ACTIVE' as const };
             }
             return {
-              name,
+              name: clean,
               totalWorkers: 0,
               employed: 0,
               available: 0,
@@ -371,6 +405,16 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               status: 'ACTIVE' as const,
             };
           });
+
+          // Merge any previously saved local entries that aren't yet in backend names
+          prev.forEach((prevItem) => {
+            const cleanPrev = prevItem.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+            const alreadyInStats = asStats.some((s) => s.name.toLowerCase() === cleanPrev);
+            if (!alreadyInStats) {
+              asStats.push({ ...prevItem, name: prevItem.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim() });
+            }
+          });
+
           try {
             localStorage.setItem('serbisure_admin_barangays', JSON.stringify(asStats));
           } catch {

@@ -24,8 +24,47 @@ import {
   fetchDeskProfileApi, 
   updateDeskProfileApi,
   fetchDashboardStats,
-  fetchVerificationQueue
+  fetchVerificationQueue,
+  sanitizeUserFriendlyError
 } from '../api/adminApi';
+import {
+  getRegions,
+  getProvinces,
+  getCities,
+  getBarangays,
+  getZipCodeForCity,
+  type Region,
+  type Province,
+  type CityMunicipality,
+  type Barangay,
+} from '../services/locationService';
+
+function formatPhilippineMobile(input: string): string {
+  let digits = input.replace(/\D/g, '');
+
+  // Strip leading country code or zero if user pasted full number
+  if (digits.startsWith('639')) {
+    digits = digits.slice(2);
+  } else if (digits.startsWith('63') && digits.length > 2) {
+    digits = digits.slice(2);
+  } else if (digits.startsWith('09')) {
+    digits = digits.slice(1);
+  } else if (digits.startsWith('0') && digits.length > 1) {
+    digits = digits.slice(1);
+  }
+
+  // Maximum 10 digits (9XX XXX XXXX)
+  digits = digits.slice(0, 10);
+
+  // Group as 3-3-4 (e.g. 955 555 5555)
+  if (digits.length <= 3) {
+    return digits;
+  } else if (digits.length <= 6) {
+    return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+  } else {
+    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+  }
+}
 
 export const SettingsPage: React.FC = () => {
   const { currentRole, currentUser, selectedBarangay, barangays, addBarangay, verifications } = useAdmin();
@@ -111,11 +150,170 @@ export const SettingsPage: React.FC = () => {
   }, [currentRole, activeBarangay, currentUser?.name, currentUser?.email, storageKey]);
 
   // ---------------------------------------------------------
-  // Add Barangay Modal State (Superadmin only)
+  // Add Barangay Modal State (Superadmin only) - PSGC Dropdowns
   // ---------------------------------------------------------
   const [showAddBarangay, setShowAddBarangay] = useState(false);
-  const [addBrgyForm, setAddBrgyForm] = useState({ name: '', status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE' });
+  const [addBrgyForm, setAddBrgyForm] = useState({
+    regionCode: '100000000',
+    regionName: 'Region X - Northern Mindanao',
+    provinceCode: '104300000',
+    provinceName: 'Misamis Oriental',
+    cityCode: '104305000',
+    cityName: 'City of Cagayan De Oro',
+    barangayName: '',
+    customBarangayName: '',
+    street: '',
+    contactNumber: '',
+    zipcode: '9000',
+    country: 'Philippines',
+  });
   const [addBrgyError, setAddBrgyError] = useState<string | null>(null);
+  const [isSubmittingBrgy, setIsSubmittingBrgy] = useState(false);
+
+  // PSGC Location Dropdown Lists
+  const [regionsList, setRegionsList] = useState<Region[]>([]);
+  const [provincesList, setProvincesList] = useState<Province[]>([]);
+  const [citiesList, setCitiesList] = useState<CityMunicipality[]>([]);
+  const [barangaysList, setBarangaysList] = useState<Barangay[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+
+  // Initialize PSGC locations
+  useEffect(() => {
+    let isMounted = true;
+    async function initLocations() {
+      setLoadingLocations(true);
+      try {
+        const [regs, provs, cities, brgys] = await Promise.all([
+          getRegions(),
+          getProvinces('100000000'),
+          getCities('104300000', '100000000'),
+          getBarangays('104305000'),
+        ]);
+        if (isMounted) {
+          setRegionsList(regs);
+          setProvincesList(provs);
+          setCitiesList(cities);
+          setBarangaysList(brgys);
+        }
+      } catch (err) {
+        console.warn('Failed to initialize locations:', err);
+      } finally {
+        if (isMounted) setLoadingLocations(false);
+      }
+    }
+    initLocations();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleRegionChange = async (regCode: string) => {
+    const reg = regionsList.find((r) => r.code === regCode);
+    const regName = reg ? reg.displayName || reg.name : '';
+    setLoadingLocations(true);
+    setAddBrgyError(null);
+    try {
+      const provs = await getProvinces(regCode);
+      setProvincesList(provs);
+
+      const firstProv = provs[0];
+      const provCode = firstProv ? firstProv.code : '';
+      const provName = firstProv ? firstProv.name : '';
+
+      let cities: CityMunicipality[] = [];
+      if (provCode) {
+        cities = await getCities(provCode, regCode);
+      }
+      setCitiesList(cities);
+
+      const firstCity = cities[0];
+      const cityCode = firstCity ? firstCity.code : '';
+      const cityName = firstCity ? firstCity.name : '';
+
+      let brgys: Barangay[] = [];
+      if (cityCode) {
+        brgys = await getBarangays(cityCode);
+      }
+      setBarangaysList(brgys);
+
+      const zip = cityCode ? getZipCodeForCity(cityCode, cityName) : '9000';
+
+      setAddBrgyForm((prev) => ({
+        ...prev,
+        regionCode: regCode,
+        regionName: regName,
+        provinceCode: provCode,
+        provinceName: provName,
+        cityCode: cityCode,
+        cityName: cityName,
+        barangayName: '',
+        customBarangayName: '',
+        zipcode: zip,
+      }));
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const handleProvinceChange = async (provCode: string) => {
+    const prov = provincesList.find((p) => p.code === provCode);
+    const provName = prov ? prov.name : '';
+    setLoadingLocations(true);
+    setAddBrgyError(null);
+    try {
+      const cities = await getCities(provCode, addBrgyForm.regionCode);
+      setCitiesList(cities);
+
+      const firstCity = cities[0];
+      const cityCode = firstCity ? firstCity.code : '';
+      const cityName = firstCity ? firstCity.name : '';
+
+      let brgys: Barangay[] = [];
+      if (cityCode) {
+        brgys = await getBarangays(cityCode);
+      }
+      setBarangaysList(brgys);
+
+      const zip = cityCode ? getZipCodeForCity(cityCode, cityName) : '9000';
+
+      setAddBrgyForm((prev) => ({
+        ...prev,
+        provinceCode: provCode,
+        provinceName: provName,
+        cityCode: cityCode,
+        cityName: cityName,
+        barangayName: '',
+        customBarangayName: '',
+        zipcode: zip,
+      }));
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const handleCityChange = async (cityCode: string) => {
+    const city = citiesList.find((c) => c.code === cityCode);
+    const cityName = city ? city.name : '';
+    setLoadingLocations(true);
+    setAddBrgyError(null);
+    try {
+      const brgys = await getBarangays(cityCode);
+      setBarangaysList(brgys);
+
+      const zip = getZipCodeForCity(cityCode, cityName);
+
+      setAddBrgyForm((prev) => ({
+        ...prev,
+        cityCode: cityCode,
+        cityName: cityName,
+        barangayName: '',
+        customBarangayName: '',
+        zipcode: zip,
+      }));
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
 
   // ---------------------------------------------------------
   // Live Barangay Metrics (Workforce + Verification Breakdown)
@@ -264,7 +462,7 @@ export const SettingsPage: React.FC = () => {
       });
 
       if (res.error) {
-        setDeskError(res.error);
+        setDeskError(sanitizeUserFriendlyError(res.error));
         return;
       }
 
@@ -279,38 +477,83 @@ export const SettingsPage: React.FC = () => {
       setDeskProfile(updated);
       setDeskSuccess(true);
     } catch (err: unknown) {
-      setDeskError(err instanceof Error ? err.message : 'Failed to save desk profile to database. Please check your connection.');
+      setDeskError(sanitizeUserFriendlyError(err instanceof Error ? err.message : 'Failed to save desk profile to database. Please check your connection.'));
     } finally {
       setDeskLoading(false);
     }
   };
 
-  const handleAddBarangaySubmit = (e: React.FormEvent) => {
+  const handleAddBarangaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = addBrgyForm.name.trim();
-    if (!trimmed) {
-      setAddBrgyError('Barangay name is required.');
+    const rawName = addBrgyForm.barangayName === '__custom__'
+      ? addBrgyForm.customBarangayName.trim()
+      : addBrgyForm.barangayName.trim();
+
+    if (!rawName) {
+      setAddBrgyError('Please select a Barangay from the dropdown list.');
       return;
     }
 
-    const duplicate = barangays.some((b) => b.name.toLowerCase() === trimmed.toLowerCase());
-    if (duplicate) {
-      setAddBrgyError(`Barangay "${trimmed}" is already registered in the directory.`);
-      return;
-    }
+    const cleanName = rawName.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
 
-    addBarangay({
-      name: trimmed,
-      totalWorkers: 0,
-      employed: 0,
-      available: 0,
-      employmentRatio: 0,
-      status: addBrgyForm.status,
+    const duplicate = barangays.some((b) => {
+      const existingClean = b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+      return existingClean === cleanName.toLowerCase();
     });
 
-    setAddBrgyForm({ name: '', status: 'ACTIVE' });
+    if (duplicate) {
+      setAddBrgyError(`Barangay "${cleanName}" is already registered in the directory.`);
+      return;
+    }
+
+    let formattedContact: string | undefined = undefined;
+    const rawContactDigits = addBrgyForm.contactNumber.replace(/\D/g, '');
+    if (rawContactDigits) {
+      if (rawContactDigits.length !== 10 || !rawContactDigits.startsWith('9')) {
+        setAddBrgyError('Please enter a valid 10-digit Philippine mobile number starting with 9 (e.g. 955 555 5555).');
+        return;
+      }
+      formattedContact = `+63${rawContactDigits}`;
+    }
+
+    setIsSubmittingBrgy(true);
     setAddBrgyError(null);
-    setShowAddBarangay(false);
+
+    try {
+      const res = await addBarangay({
+        name: cleanName,
+        region: addBrgyForm.regionName || 'Region X - Northern Mindanao',
+        province: addBrgyForm.provinceName || 'Misamis Oriental',
+        city: addBrgyForm.cityName || 'City of Cagayan De Oro',
+        street: addBrgyForm.street.trim(),
+        contact_number: formattedContact || undefined,
+        zipcode: addBrgyForm.zipcode.trim() || '9000',
+        country: 'Philippines',
+        totalWorkers: 0,
+        employed: 0,
+        available: 0,
+        employmentRatio: 0,
+        status: 'ACTIVE',
+      });
+
+      if (res && !res.success) {
+        setAddBrgyError(sanitizeUserFriendlyError(res.error || 'Failed to register barangay in database.'));
+        return;
+      }
+
+      setAddBrgyForm((prev) => ({
+        ...prev,
+        barangayName: '',
+        customBarangayName: '',
+        street: '',
+        contactNumber: '',
+      }));
+      setShowAddBarangay(false);
+    } catch (err: unknown) {
+      setAddBrgyError(sanitizeUserFriendlyError(err instanceof Error ? err.message : 'Failed to register barangay in database.'));
+    } finally {
+      setIsSubmittingBrgy(false);
+    }
   };
 
   // ---------------------------------------------------------
@@ -366,7 +609,13 @@ export const SettingsPage: React.FC = () => {
               type="button"
               onClick={() => {
                 setAddBrgyError(null);
-                setAddBrgyForm({ name: '', status: 'ACTIVE' });
+                setAddBrgyForm((prev) => ({
+                  ...prev,
+                  barangayName: '',
+                  customBarangayName: '',
+                  street: '',
+                  contactNumber: '',
+                }));
                 setShowAddBarangay(true);
               }}
               className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full bg-[#0D0D11] hover:bg-black text-white text-xs font-black font-display tracking-wide cursor-pointer transition shadow-sm"
@@ -405,7 +654,7 @@ export const SettingsPage: React.FC = () => {
                     return (
                       <tr key={b.name} className="hover:bg-zinc-50/50 transition">
                         <td className="py-3.5 px-4 font-bold font-display text-zinc-900">
-                          Brgy. {b.name}
+                          Brgy. {b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim()}
                         </td>
                         <td className="py-3.5 px-3 text-center font-bold text-zinc-900">
                           {rowStats.totalRegistered}
@@ -769,7 +1018,7 @@ export const SettingsPage: React.FC = () => {
           onClick={() => setShowAddBarangay(false)}
         >
           <div
-            className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5"
+            className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -789,7 +1038,7 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <p className="text-xs text-zinc-400 font-medium">
-              Register a new administrative barangay jurisdiction for local Kasambahay coverage.
+              Select from official Philippine Standard Geographic Code (PSGC) places to avoid typos and preserve data integrity.
             </p>
 
             {addBrgyError && (
@@ -800,41 +1049,217 @@ export const SettingsPage: React.FC = () => {
             )}
 
             <form onSubmit={handleAddBarangaySubmit} className="space-y-4">
+              {/* Region Select Dropdown */}
               <div>
                 <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                  Barangay Name
+                  Region
+                </label>
+                <div className="relative">
+                  <select
+                    value={addBrgyForm.regionCode}
+                    onChange={(e) => handleRegionChange(e.target.value)}
+                    disabled={loadingLocations}
+                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8"
+                  >
+                    {regionsList.map((r) => (
+                      <option key={r.code} value={r.code}>
+                        {r.displayName || r.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400">
+                    <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* Province and City Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Province Dropdown */}
+                <div>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    Province
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={addBrgyForm.provinceCode}
+                      onChange={(e) => handleProvinceChange(e.target.value)}
+                      disabled={loadingLocations || provincesList.length === 0}
+                      className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8 disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                    >
+                      {provincesList.map((p) => (
+                        <option key={p.code} value={p.code}>
+                          {p.displayName || p.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400">
+                      <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* City / Municipality Dropdown */}
+                <div>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    City / Municipality
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={addBrgyForm.cityCode}
+                      onChange={(e) => handleCityChange(e.target.value)}
+                      disabled={loadingLocations || citiesList.length === 0}
+                      className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8 disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                    >
+                      {citiesList.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.displayName || c.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400">
+                      <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Barangay Dropdown */}
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                  Barangay Name <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={addBrgyForm.barangayName}
+                    onChange={(e) => {
+                      setAddBrgyError(null);
+                      setAddBrgyForm({ ...addBrgyForm, barangayName: e.target.value });
+                    }}
+                    disabled={loadingLocations || barangaysList.length === 0}
+                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8 disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">
+                      -- Select Barangay {barangaysList.length > 0 ? `(${barangaysList.length} Options)` : ''} --
+                    </option>
+                    {barangaysList.map((b) => {
+                      const cleanB = b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+                      const isAlreadyAdded = barangays.some((existing) => {
+                        const existingClean = existing.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+                        return existingClean === cleanB;
+                      });
+                      return (
+                        <option key={b.code} value={b.name} disabled={isAlreadyAdded}>
+                          {b.displayName || b.name} {isAlreadyAdded ? '✓ (Already Registered)' : ''}
+                        </option>
+                      );
+                    })}
+                    <option value="__custom__">+ Other / Enter Custom Barangay</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400">
+                    <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* Custom Barangay Input if '__custom__' selected */}
+              {addBrgyForm.barangayName === '__custom__' && (
+                <div>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    Custom Barangay Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={60}
+                    value={addBrgyForm.customBarangayName}
+                    onChange={(e) => {
+                      setAddBrgyError(null);
+                      setAddBrgyForm({ ...addBrgyForm, customBarangayName: e.target.value });
+                    }}
+                    placeholder="e.g. Upper Balulang / Sitio Zone 9"
+                    autoFocus
+                    className="w-full border border-orange-200 bg-orange-50/20 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380]"
+                  />
+                </div>
+              )}
+
+              {/* House No. / Street / Zone / Subdivision */}
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                  House No. / Street / Zone / Subdivision
                 </label>
                 <input
                   type="text"
-                  maxLength={60}
-                  value={addBrgyForm.name}
-                  onChange={(e) => {
-                    setAddBrgyError(null);
-                    setAddBrgyForm({ ...addBrgyForm, name: e.target.value });
-                  }}
-                  placeholder="e.g. Macasandig"
-                  autoFocus
+                  maxLength={100}
+                  value={addBrgyForm.street}
+                  onChange={(e) => setAddBrgyForm({ ...addBrgyForm, street: e.target.value })}
+                  placeholder="e.g. Zone 1, Purok 3 / Barangay Hall Compound"
                   className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380]"
                 />
               </div>
 
+              {/* Official Desk Contact / Hotline Number */}
               <div>
                 <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                  Jurisdiction Status
+                  Official Desk Contact / Hotline Number
                 </label>
-                <select
-                  value={addBrgyForm.status}
-                  onChange={(e) =>
-                    setAddBrgyForm({
-                      ...addBrgyForm,
-                      status: e.target.value as 'ACTIVE' | 'INACTIVE',
-                    })
-                  }
-                  className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer"
-                >
-                  <option value="ACTIVE">ACTIVE (Operational LGU Desk)</option>
-                  <option value="INACTIVE">INACTIVE (Coverage Pending)</option>
-                </select>
+                <div className="flex items-center border border-zinc-200 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-[#FFB380] focus-within:border-transparent bg-white transition">
+                  <div className="bg-zinc-50 border-r border-zinc-200 px-3.5 py-2.5 flex items-center gap-1.5 select-none shrink-0">
+                    <span className="text-xs">🇵🇭</span>
+                    <span className="text-xs font-black font-display text-zinc-700">+63</span>
+                  </div>
+                  <input
+                    type="tel"
+                    value={addBrgyForm.contactNumber}
+                    onChange={(e) => {
+                      setAddBrgyError(null);
+                      const formatted = formatPhilippineMobile(e.target.value);
+                      setAddBrgyForm({ ...addBrgyForm, contactNumber: formatted });
+                    }}
+                    placeholder="9XX XXX XXXX"
+                    className="w-full px-3.5 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none bg-transparent"
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-400 mt-1 font-medium">
+                  Type the 10-digit number starting with 9. Formatted as +63 9XX XXX XXXX. Leave blank to auto-generate.
+                </p>
+              </div>
+
+              {/* Zip Code and Country Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    Zip Code
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    value={addBrgyForm.zipcode}
+                    onChange={(e) => setAddBrgyForm({ ...addBrgyForm, zipcode: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                    placeholder="e.g. 9000"
+                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    Country
+                  </label>
+                  <input
+                    type="text"
+                    value={addBrgyForm.country}
+                    readOnly
+                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-zinc-700 bg-zinc-50 cursor-not-allowed focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-3">
@@ -848,9 +1273,17 @@ export const SettingsPage: React.FC = () => {
                 <button
                   id="btn-confirm-add-barangay"
                   type="submit"
-                  className="px-5 py-2 rounded-full bg-[#0D0D11] hover:bg-black text-white text-xs font-black font-display cursor-pointer transition shadow-sm"
+                  disabled={isSubmittingBrgy}
+                  className="px-5 py-2 rounded-full bg-[#0D0D11] hover:bg-black text-white text-xs font-black font-display cursor-pointer transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                 >
-                  Add Barangay
+                  {isSubmittingBrgy ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Saving to Database...</span>
+                    </>
+                  ) : (
+                    <span>Add Barangay</span>
+                  )}
                 </button>
               </div>
             </form>

@@ -1,4 +1,5 @@
-import { fetchApi } from './apiClient';
+import { fetchApi, sanitizeUserFriendlyError } from './apiClient';
+export { sanitizeUserFriendlyError };
 import { VerificationRequest, UserProfile, DashboardStatsResponse, BookingCompliance, AuditLogEntry, ChatInboxEntry } from '../types/admin';
 import type { ChatMessage } from '../types/admin';
 
@@ -146,6 +147,31 @@ export async function fetchAllUserBarangays(): Promise<string[]> {
     return res.user_barangays;
   }
   return Array.isArray(res.barangays) ? res.barangays : [];
+}
+
+export interface CreateBarangayPayload {
+  name: string;
+  region?: string;
+  province?: string;
+  city?: string;
+  street?: string;
+  contact_number?: string;
+  zipcode?: string;
+  country?: string;
+}
+
+export interface CreateBarangayResponse {
+  success?: boolean;
+  message?: string;
+  error?: string;
+  barangay?: any;
+}
+
+export async function createActiveBarangayApi(payload: CreateBarangayPayload): Promise<CreateBarangayResponse> {
+  return fetchApi<CreateBarangayResponse>('/api/v1/accounts/admin/active-barangays/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export interface VerificationStatusStats {

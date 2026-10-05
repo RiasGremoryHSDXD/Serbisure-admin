@@ -25,12 +25,6 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const setDemoCredentials = (email: string, pass: string) => {
-    setUsername(email);
-    setPassword(pass);
-    setErrorMessage(null);
-  };
-
   return (
     <div className="min-h-screen w-full bg-[#F6F5F2] flex items-center justify-center p-4 sm:p-8 lg:p-12 font-sans select-none">
       <div className="w-full max-w-5xl bg-white rounded-[40px] p-6 sm:p-12 lg:p-16 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
@@ -129,36 +123,6 @@ export const LoginPage: React.FC = () => {
                 <span>Sign In</span>
               )}
             </button>
-
-            {/* Quick Portal Selector Pills */}
-            <div className="pt-6 mt-4">
-              <div className="text-[11px] font-black uppercase tracking-wider text-zinc-400 font-display mb-2.5">
-                Quick Select Portal
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDemoCredentials('serbisure@ustp.com', 'iloveserbisure123')}
-                  className="px-4 py-2 bg-[#FFF4ED] text-[#FFB380] hover:bg-[#FFE5DC] rounded-full text-xs font-black font-display transition-colors cursor-pointer border-0"
-                >
-                  Superadmin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDemoCredentials('pagatpat@lgu.com', 'ilovepagatpatlgu')}
-                  className="px-4 py-2 bg-[#F0F0EC] hover:bg-[#E5E5E0] text-zinc-700 rounded-full text-xs font-bold font-display transition-colors cursor-pointer border-0"
-                >
-                  Brgy. Pagatpat
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDemoCredentials('canitoan@lgu.com', 'ilovecanitoanlgu')}
-                  className="px-4 py-2 bg-[#F0F0EC] hover:bg-[#E5E5E0] text-zinc-700 rounded-full text-xs font-bold font-display transition-colors cursor-pointer border-0"
-                >
-                  Brgy. Canitoan
-                </button>
-              </div>
-            </div>
           </form>
 
         </div>
