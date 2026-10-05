@@ -27,8 +27,6 @@ interface AdminContextType {
   setSelectedBarangay: (barangay: string) => void;
   activeNav: string;
   setActiveNav: (nav: string) => void;
-  searchQuery: string;
-  setSearchQuery: (query: string) => void;
   
   // Data
   barangays: BarangayStats[];
@@ -137,7 +135,6 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return 'All Barangays';
   });
   const [activeNav, setActiveNav] = useState<string>('dashboard');
-  const [searchQuery, setSearchQuery] = useState<string>('');
   
   const [barangays, setBarangays] = useState<BarangayStats[]>(() => {
     try {
@@ -639,8 +636,6 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSelectedBarangay: setBarangaySafely,
         activeNav,
         setActiveNav,
-        searchQuery,
-        setSearchQuery,
         barangays,
         userBarangays,
         verifications,
