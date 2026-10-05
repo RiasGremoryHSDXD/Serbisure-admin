@@ -1,6 +1,6 @@
 export type AdminRole = 'SUPERADMIN' | 'ADMIN';
 
-export type AccountRole = 'KASAMBAHAY' | 'HOMEOWNER';
+export type AccountRole = 'KASAMBAHAY' | 'HOMEOWNER' | 'BARANGAY' | 'SUPERADMIN';
 
 export type DocumentType = 'NBI CLEARANCE' | 'Police Clearance' | 'National ID' | 'Clearances (NBI + Police)' | string;
 

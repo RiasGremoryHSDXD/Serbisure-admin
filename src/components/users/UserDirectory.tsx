@@ -13,10 +13,12 @@ import {
   Image as ImageIcon,
   ZoomIn,
   Search,
-  ExternalLink
+  ExternalLink,
+  Lock
 } from 'lucide-react';
+import clsx from 'clsx';
 import { useAdmin } from '../../context/AdminContext';
-import type { AccountRole, UserProfile, ChatMessage, ChatInboxEntry, SocialLink } from '../../types/admin';
+import type { AccountRole, AdminRole, UserProfile, ChatMessage, ChatInboxEntry, SocialLink } from '../../types/admin';
 import { fetchChatThread, sendChatMessage, sendChatImageMessage, markMessageRead, toggleChatReaction, fetchChatInbox } from '../../api/adminApi';
 import { getOptimizedWebpUrl } from '../../utils/imageOptimizer';
 
@@ -230,14 +232,59 @@ export const UserDirectory: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showEmojiPicker]);
 
-  // Load inbox on mount, then poll every 6 s (well under the 60/min throttle).
+  // Load inbox on mount, then poll every 5 s (well under the 60/min throttle).
+  // Also silently refreshes the currently open thread so new incoming messages appear automatically.
   // Pauses automatically when the tab is hidden to avoid wasting quota.
+  const messageThreadUserIdRef = useRef<string | null>(messageThreadUserId);
+  messageThreadUserIdRef.current = messageThreadUserId;
+
+  const refreshActiveThread = async (userId: string) => {
+    if (!userId || isChatLoading) return;
+    try {
+      const msgs = await fetchChatThread(userId);
+      setChatMessages((prev) => {
+        // Compare length or latest message ID or reaction changes before updating
+        const prevLen = prev.length;
+        const newLen = msgs.length;
+        const prevLastId = prevLen > 0 ? prev[prevLen - 1].chat_message_id : null;
+        const newLastId = newLen > 0 ? msgs[newLen - 1].chat_message_id : null;
+
+        if (prevLen !== newLen || prevLastId !== newLastId) {
+          return msgs;
+        }
+
+        // Check if any reactions changed
+        const reactionsChanged = prev.some((m, idx) => {
+          const newM = msgs[idx];
+          if (!newM) return true;
+          return JSON.stringify(m.reaction_summary) !== JSON.stringify(newM.reaction_summary) || m.my_reaction !== newM.my_reaction;
+        });
+
+        if (reactionsChanged) {
+          return msgs;
+        }
+
+        return prev;
+      });
+
+      // Mark any incoming unread messages as read
+      msgs
+        .filter((m) => !m.is_read && m.receiver_id !== userId)
+        .forEach((m) => markMessageRead(m.chat_message_id).catch(() => {}));
+    } catch {
+      // Silent catch for background poll to avoid interrupting the user
+    }
+  };
+
   useEffect(() => {
     loadInbox();
-    const POLL_INTERVAL_MS = 6000;
+    const POLL_INTERVAL_MS = 5000;
     const interval = setInterval(() => {
       if (!document.hidden) {
         loadInbox();
+        if (messageThreadUserIdRef.current) {
+          refreshActiveThread(messageThreadUserIdRef.current);
+        }
       }
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
@@ -245,6 +292,12 @@ export const UserDirectory: React.FC = () => {
   }, []);
 
   const openThread = async (userId: string) => {
+    const target = users.find((u) => u.id === userId);
+    if (target && !canMessage(currentRole, target)) {
+      setMessageThreadUserId(null);
+      return;
+    }
+
     setMessageThreadUserId(userId);
     setChatMessages([]);
     setChatError(null);
@@ -402,6 +455,16 @@ export const UserDirectory: React.FC = () => {
     }
   };
 
+  /**
+   * RBAC: Returns true if the logged-in admin is permitted to message this user.
+   * - SUPERADMIN can message anyone.
+   * - ADMIN (Barangay) can only message Homeowners and Kasambahays.
+   */
+  function canMessage(currentRole: AdminRole, targetUser: UserProfile): boolean {
+    if (currentRole === 'SUPERADMIN') return true;
+    return targetUser.role === 'HOMEOWNER' || targetUser.role === 'KASAMBAHAY' || targetUser.role === 'SUPERADMIN';
+  }
+
   // Helper to normalize barangay strings
   const cleanBarangayName = (name?: string) => {
     return (name || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim();
@@ -442,8 +505,9 @@ export const UserDirectory: React.FC = () => {
   }, [users]);
 
   // Strictly scope user directory to assigned barangay if logged in as local LGU officer or unassigned perspective
+  // For Barangay Admin, also include SUPERADMIN so they can contact City Administration
   const scopedUsers = (currentRole === 'ADMIN' && selectedBarangay)
-    ? users.filter((u) => (u.barangay || '').toLowerCase() === selectedBarangay.toLowerCase())
+    ? users.filter((u) => u.role === 'SUPERADMIN' || (u.barangay || '').toLowerCase() === selectedBarangay.toLowerCase())
     : (selectedBarangay === 'UNASSIGNED'
         ? users.filter((u) => u.hasLguCoverage === false || (u.barangay || '').toLowerCase() === 'unassigned')
         : users);
@@ -458,8 +522,13 @@ export const UserDirectory: React.FC = () => {
       })
     : scopedUsers;
 
+  // Filter out currently logged in admin so they never message themselves
+  const displayableUsers = barangayScopedUsers.filter(
+    (u) => u.id !== currentUser?.id && u.email !== currentUser?.email
+  );
+
   // Filter users by active tab
-  const tabUsers = barangayScopedUsers.filter((u) => u.role === activeTab);
+  const tabUsers = displayableUsers.filter((u) => u.role === activeTab);
   
   // Client-side name search within the active tab
   const filteredUsers = userSearch.trim()
@@ -552,7 +621,7 @@ export const UserDirectory: React.FC = () => {
                 setActiveTab('HOMEOWNER');
                 setMessageThreadUserId(null);
                 setUserSearch('');
-                const first = users.find((u) => u.role === 'HOMEOWNER');
+                const first = displayableUsers.find((u) => u.role === 'HOMEOWNER');
                 if (first) setSelectedUserId(first.id);
               }}
               className={`px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
@@ -568,7 +637,7 @@ export const UserDirectory: React.FC = () => {
                 setActiveTab('KASAMBAHAY');
                 setMessageThreadUserId(null);
                 setUserSearch('');
-                const first = users.find((u) => u.role === 'KASAMBAHAY');
+                const first = displayableUsers.find((u) => u.role === 'KASAMBAHAY');
                 if (first) setSelectedUserId(first.id);
               }}
               className={`px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
@@ -579,6 +648,41 @@ export const UserDirectory: React.FC = () => {
             >
               Kasambahays
             </button>
+            {currentRole === 'SUPERADMIN' ? (
+              <button
+                onClick={() => {
+                  setActiveTab('BARANGAY');
+                  setMessageThreadUserId(null);
+                  setUserSearch('');
+                  const first = displayableUsers.find((u) => u.role === 'BARANGAY');
+                  if (first) setSelectedUserId(first.id);
+                }}
+                className={`px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
+                  activeTab === 'BARANGAY'
+                    ? 'bg-white text-zinc-950 shadow-xs'
+                    : 'text-zinc-600 hover:text-zinc-900'
+                }`}
+              >
+                Barangay Admins
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setActiveTab('SUPERADMIN');
+                  setMessageThreadUserId(null);
+                  setUserSearch('');
+                  const first = displayableUsers.find((u) => u.role === 'SUPERADMIN');
+                  if (first) setSelectedUserId(first.id);
+                }}
+                className={`px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
+                  activeTab === 'SUPERADMIN'
+                    ? 'bg-white text-zinc-950 shadow-xs'
+                    : 'text-zinc-600 hover:text-zinc-900'
+                }`}
+              >
+                City SuperAdmin
+              </button>
+            )}
           </div>
 
           {/* Sync Refresh Button */}
@@ -609,7 +713,7 @@ export const UserDirectory: React.FC = () => {
                   setUserSearch(e.target.value);
                   setSelectedUserId('');
                 }}
-                placeholder={`Search ${activeTab === 'HOMEOWNER' ? 'homeowners' : 'kasambahays'}...`}
+                placeholder={`Search ${activeTab === 'HOMEOWNER' ? 'homeowners' : activeTab === 'KASAMBAHAY' ? 'kasambahays' : activeTab === 'BARANGAY' ? 'barangay admins' : 'superadmin'}...`}
                 className="w-full bg-[#F6F5F2] text-sm text-zinc-800 placeholder-zinc-400 rounded-full pl-9 pr-8 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#FFB380]/40 transition-all font-medium"
               />
               {userSearch && (
@@ -647,7 +751,7 @@ export const UserDirectory: React.FC = () => {
                     </button>
                   </>
                 ) : (
-                  <span>No {activeTab === 'HOMEOWNER' ? 'homeowners' : 'kasambahays'} found.</span>
+                  <span>No {activeTab === 'HOMEOWNER' ? 'homeowners' : activeTab === 'KASAMBAHAY' ? 'kasambahays' : activeTab === 'BARANGAY' ? 'barangay admins' : 'superadmin accounts'} found.</span>
                 )}
               </div>
             ) : (
@@ -659,7 +763,11 @@ export const UserDirectory: React.FC = () => {
                       key={user.id}
                       onClick={() => {
                         setSelectedUserId(user.id);
-                        openThread(user.id);
+                        if (canMessage(currentRole, user)) {
+                          openThread(user.id);
+                        } else {
+                          setMessageThreadUserId(null);
+                        }
                       }}
                       className={`flex items-center gap-3.5 px-3.5 py-3.5 cursor-pointer transition-colors duration-100 ${
                         isSelected
@@ -687,7 +795,13 @@ export const UserDirectory: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-                            {user.role === 'HOMEOWNER' ? 'Homeowner' : 'Kasambahay'}
+                            {user.role === 'HOMEOWNER' 
+                              ? 'Homeowner' 
+                              : user.role === 'KASAMBAHAY' 
+                                ? 'Kasambahay' 
+                                : user.role === 'BARANGAY' 
+                                  ? `Brgy. ${cleanBarangayName(user.barangay)}` 
+                                  : 'City SuperAdmin'}
                           </span>
                           {user.hasLguCoverage === false && (
                             <span
@@ -716,8 +830,8 @@ export const UserDirectory: React.FC = () => {
           {!isLoadingUsers && (
             <div className="px-4 py-2 border-t border-zinc-100 shrink-0 text-[10px] text-zinc-400 font-medium">
               {userSearch.trim()
-                ? `${filteredUsers.length} of ${tabUsers.length} ${activeTab === 'HOMEOWNER' ? 'homeowners' : 'kasambahays'}`
-                : `${tabUsers.length} ${activeTab === 'HOMEOWNER' ? 'homeowners' : 'kasambahays'}`}
+                ? `${filteredUsers.length} of ${tabUsers.length} ${activeTab === 'HOMEOWNER' ? 'homeowners' : activeTab === 'KASAMBAHAY' ? 'kasambahays' : activeTab === 'BARANGAY' ? 'barangay admins' : 'superadmin accounts'}`
+                : `${tabUsers.length} ${activeTab === 'HOMEOWNER' ? 'homeowners' : activeTab === 'KASAMBAHAY' ? 'kasambahays' : activeTab === 'BARANGAY' ? 'barangay admins' : 'superadmin accounts'}`}
             </div>
           )}
         </div>
@@ -754,7 +868,11 @@ export const UserDirectory: React.FC = () => {
                       {threadPartner?.name}
                     </h4>
                     <p className="text-[11px] text-zinc-400 font-medium truncate">
-                      {threadPartner?.role === 'HOMEOWNER' ? 'Homeowner' : 'Kasambahay'} · Barangay {cleanBarangayName(threadPartner?.barangay) || 'General'}
+                      {threadPartner?.role === 'BARANGAY'
+                        ? `Barangay Officer · Brgy. ${cleanBarangayName(threadPartner?.barangay)}`
+                        : threadPartner?.role === 'SUPERADMIN'
+                          ? 'City Administration · SuperAdmin'
+                          : `${threadPartner?.role === 'HOMEOWNER' ? 'Homeowner' : 'Kasambahay'} · Barangay ${cleanBarangayName(threadPartner?.barangay) || 'General'}`}
                     </p>
                   </div>
                 </div>
@@ -840,49 +958,59 @@ export const UserDirectory: React.FC = () => {
                             >
                               {/* Bubble Container + Hover Emoji Reaction Bar */}
                               <div className={`relative flex items-center gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                                <div
-                                  title={formatChatDate(msg.createdAt)}
-                                  className={`max-w-[85%] sm:max-w-[460px] rounded-2xl px-4 py-2.5 text-xs font-medium break-words shadow-2xs ${
-                                    isMe
-                                      ? 'bg-[#0D0D11] text-white rounded-br-xs'
-                                      : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
-                                  }`}
-                                >
-                                  {msg.message_type === 'image' ? (
-                                    <div className="space-y-1.5">
-                                      {msg.image_url ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => setLightboxUrl(msg.image_url!)}
-                                          className="group relative block overflow-hidden rounded-xl cursor-pointer focus:outline-none"
-                                          title="Click to expand image"
-                                        >
-                                          <img
-                                            src={getOptimizedWebpUrl(msg.image_url, { quality: 'auto' })}
-                                            alt="Chat attachment"
-                                            className="max-w-[280px] max-h-[280px] rounded-xl object-cover transition-transform duration-200 group-hover:scale-105"
-                                            loading="lazy"
-                                          />
-                                          <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl text-white">
-                                            <ZoomIn className="w-5 h-5 drop-shadow" />
-                                          </div>
-                                        </button>
-                                      ) : (
-                                        <div className="flex items-center gap-2 p-3 bg-zinc-200/50 rounded-xl text-zinc-500 text-xs">
-                                          <ImageIcon className="w-5 h-5 text-zinc-400 shrink-0" />
-                                          <span>Image unavailable</span>
+                                {msg.message_type === 'image' ? (
+                                  /* Facebook Messenger style: Standalone borderless image without outer bubble box */
+                                  <div className={`flex flex-col gap-1.5 ${isMe ? 'items-end' : 'items-start'}`}>
+                                    {msg.image_url ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setLightboxUrl(msg.image_url!)}
+                                        className="group relative block overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer focus:outline-none border border-black/5 bg-transparent p-0 max-w-[260px] sm:max-w-[320px]"
+                                        title="Click to expand image"
+                                      >
+                                        <img
+                                          src={getOptimizedWebpUrl(msg.image_url, { quality: 'auto' })}
+                                          alt="Chat attachment"
+                                          className="w-full h-auto max-h-[320px] rounded-2xl object-cover transition-transform duration-200 group-hover:scale-[1.02] block"
+                                          loading="lazy"
+                                        />
+                                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl text-white">
+                                          <ZoomIn className="w-6 h-6 drop-shadow" />
                                         </div>
-                                      )}
-                                      {msg.message_payload && (
-                                        <p className="text-xs break-words leading-relaxed pt-0.5">
-                                          {msg.message_payload}
-                                        </p>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    msg.message_payload
-                                  )}
-                                </div>
+                                      </button>
+                                    ) : (
+                                      <div className="flex items-center gap-2 p-3 bg-zinc-100 rounded-2xl text-zinc-500 text-xs border border-zinc-200">
+                                        <ImageIcon className="w-5 h-5 text-zinc-400 shrink-0" />
+                                        <span>Image unavailable</span>
+                                      </div>
+                                    )}
+
+                                    {/* Optional caption below image */}
+                                    {msg.message_payload && (
+                                      <div
+                                        className={`max-w-[85%] sm:max-w-[320px] rounded-2xl px-4 py-2 text-xs font-medium break-words shadow-2xs ${
+                                          isMe
+                                            ? 'bg-[#0D0D11] text-white rounded-br-xs'
+                                            : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
+                                        }`}
+                                      >
+                                        {msg.message_payload}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  /* Standard text message bubble */
+                                  <div
+                                    title={formatChatDate(msg.createdAt)}
+                                    className={`max-w-[85%] sm:max-w-[460px] rounded-2xl px-4 py-2.5 text-xs font-medium break-words shadow-2xs ${
+                                      isMe
+                                        ? 'bg-[#0D0D11] text-white rounded-br-xs'
+                                        : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
+                                    }`}
+                                  >
+                                    {msg.message_payload}
+                                  </div>
+                                )}
 
                                 {/* Floating Facebook-style Emoji Reaction Bar on Hover */}
                                 <div
@@ -943,134 +1071,143 @@ export const UserDirectory: React.FC = () => {
               {/* Message Input Footer - hidden while loading thread */}
               {!isChatLoading && (
                 <div className="p-3 bg-white border-t border-zinc-100 shrink-0">
-                  {/* Selected image preview */}
-                  {imagePreviewUrl && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 mb-2">
-                      <img
-                        src={imagePreviewUrl}
-                        alt="Preview"
-                        className="w-12 h-12 object-cover rounded-lg border border-zinc-200 shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-zinc-700 truncate">{imageFile?.name}</p>
-                        <p className="text-[10px] text-zinc-400">
-                          {imageFile ? `${(imageFile.size / 1024).toFixed(1)} KB` : ''}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setImageFile(null);
-                          setImagePreviewUrl(null);
-                        }}
-                        className="text-zinc-400 hover:text-red-500 transition-colors shrink-0 p-1 cursor-pointer"
-                        title="Remove image"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                  {threadPartner && !canMessage(currentRole, threadPartner) ? (
+                    <div className="flex items-center justify-center gap-2 py-3 px-4 bg-zinc-100 rounded-2xl text-zinc-400 text-xs font-bold select-none">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Messaging restricted</span>
                     </div>
-                  )}
+                  ) : (
+                    <>
+                      {/* Selected image preview */}
+                      {imagePreviewUrl && (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 mb-2">
+                          <img
+                            src={imagePreviewUrl}
+                            alt="Preview"
+                            className="w-12 h-12 object-cover rounded-lg border border-zinc-200 shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-zinc-700 truncate">{imageFile?.name}</p>
+                            <p className="text-[10px] text-zinc-400">
+                              {imageFile ? `${(imageFile.size / 1024).toFixed(1)} KB` : ''}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setImageFile(null);
+                              setImagePreviewUrl(null);
+                            }}
+                            className="text-zinc-400 hover:text-red-500 transition-colors shrink-0 p-1 cursor-pointer"
+                            title="Remove image"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
 
-                  {/* Emoji picker panel */}
-                  {showEmojiPicker && (
-                    <div
-                      ref={emojiPickerRef}
-                      className="flex flex-wrap gap-1.5 p-2 bg-white border border-zinc-200 rounded-2xl shadow-lg mb-2"
-                    >
-                      {CHAT_EMOJIS.map((emoji) => (
+                      {/* Emoji picker panel */}
+                      {showEmojiPicker && (
+                        <div
+                          ref={emojiPickerRef}
+                          className="flex flex-wrap gap-1.5 p-2 bg-white border border-zinc-200 rounded-2xl shadow-lg mb-2"
+                        >
+                          {CHAT_EMOJIS.map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => {
+                                setChatInput((prev) => prev + emoji);
+                                setShowEmojiPicker(false);
+                              }}
+                              className="text-xl hover:scale-125 transition-transform cursor-pointer p-1 rounded-lg hover:bg-zinc-100"
+                              title={`Insert ${emoji}`}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1.5 bg-[#F6F5F2] rounded-2xl px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-[#FFB380]/50 transition-all">
+                        {/* Emoji toggle button */}
                         <button
-                          key={emoji}
+                          type="button"
+                          onClick={() => setShowEmojiPicker((prev) => !prev)}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${
+                            showEmojiPicker ? 'text-[#FFB380] bg-white shadow-2xs' : 'text-zinc-400 hover:text-zinc-700'
+                          }`}
+                          title="Insert emoji"
+                        >
+                          <Smile className="w-4 h-4" />
+                        </button>
+
+                        {/* Image attach button */}
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isSending || isSendingImage}
+                          className="p-1.5 text-zinc-400 hover:text-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"
+                          title="Attach image (JPEG, PNG, WEBP)"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={handleImageFileChange}
+                        />
+
+                        {/* Textarea */}
+                        <textarea
+                          rows={1}
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              if (!isSending && !isSendingImage) {
+                                if (imageFile) {
+                                  handleSendImage();
+                                } else if (chatInput.trim()) {
+                                  handleSend();
+                                }
+                              }
+                            }
+                          }}
+                          disabled={isSending || isSendingImage}
+                          placeholder={imageFile ? 'Add a caption (optional)...' : 'Write a message...'}
+                          className="flex-1 bg-transparent text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none resize-none max-h-24 py-1 font-medium px-1"
+                        />
+
+                        {/* Send button */}
+                        <button
                           type="button"
                           onClick={() => {
-                            setChatInput((prev) => prev + emoji);
-                            setShowEmojiPicker(false);
-                          }}
-                          className="text-xl hover:scale-125 transition-transform cursor-pointer p-1 rounded-lg hover:bg-zinc-100"
-                          title={`Insert ${emoji}`}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-1.5 bg-[#F6F5F2] rounded-2xl px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-[#FFB380]/50 transition-all">
-                    {/* Emoji toggle button */}
-                    <button
-                      type="button"
-                      onClick={() => setShowEmojiPicker((prev) => !prev)}
-                      className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${
-                        showEmojiPicker ? 'text-[#FFB380] bg-white shadow-2xs' : 'text-zinc-400 hover:text-zinc-700'
-                      }`}
-                      title="Insert emoji"
-                    >
-                      <Smile className="w-4 h-4" />
-                    </button>
-
-                    {/* Image attach button */}
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isSending || isSendingImage}
-                      className="p-1.5 text-zinc-400 hover:text-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"
-                      title="Attach image (JPEG, PNG, WEBP)"
-                    >
-                      <ImageIcon className="w-4 h-4" />
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="hidden"
-                      onChange={handleImageFileChange}
-                    />
-
-                    {/* Textarea */}
-                    <textarea
-                      rows={1}
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          if (!isSending && !isSendingImage) {
                             if (imageFile) {
                               handleSendImage();
-                            } else if (chatInput.trim()) {
+                            } else {
                               handleSend();
                             }
-                          }
-                        }
-                      }}
-                      disabled={isSending || isSendingImage}
-                      placeholder={imageFile ? 'Add a caption (optional)...' : 'Write a message...'}
-                      className="flex-1 bg-transparent text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none resize-none max-h-24 py-1 font-medium px-1"
-                    />
-
-                    {/* Send button */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (imageFile) {
-                          handleSendImage();
-                        } else {
-                          handleSend();
-                        }
-                      }}
-                      disabled={isSending || isSendingImage || (!chatInput.trim() && !imageFile)}
-                      className="w-8 h-8 rounded-full bg-[#0D0D11] hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed text-white flex items-center justify-center shrink-0 transition-all cursor-pointer active:scale-90"
-                      title={imageFile ? 'Send image' : 'Send message'}
-                    >
-                      {isSending || isSendingImage ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Send className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  </div>
-                  <div className="text-[10px] text-zinc-400 text-right mt-1 px-1">
-                    Press Enter to send, Shift+Enter for new line
-                  </div>
+                          }}
+                          disabled={isSending || isSendingImage || (!chatInput.trim() && !imageFile)}
+                          className="w-8 h-8 rounded-full bg-[#0D0D11] hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed text-white flex items-center justify-center shrink-0 transition-all cursor-pointer active:scale-90"
+                          title={imageFile ? 'Send image' : 'Send message'}
+                        >
+                          {isSending || isSendingImage ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Send className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <div className="text-[10px] text-zinc-400 text-right mt-1 px-1">
+                        Press Enter to send, Shift+Enter for new line
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1113,6 +1250,32 @@ export const UserDirectory: React.FC = () => {
                         No LGU Account ({selectedUser.barangay || 'Unassigned'})
                       </span>
                     )}
+
+                    {/* Action: Message button or Locked Badge */}
+                    <div className="pt-2 flex justify-center">
+                      {canMessage(currentRole, selectedUser) ? (
+                        <button
+                          type="button"
+                          onClick={() => openThread(selectedUser.id)}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-[#0D0D11] hover:bg-zinc-800 text-white transition-all cursor-pointer shadow-xs active:scale-95"
+                          title={`Message ${selectedUser.name}`}
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Message</span>
+                        </button>
+                      ) : (
+                        <div
+                          className={clsx(
+                            'flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold',
+                            'bg-zinc-100 text-zinc-400 cursor-not-allowed select-none'
+                          )}
+                          title="Messaging restricted"
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>Messaging restricted</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -1124,7 +1287,13 @@ export const UserDirectory: React.FC = () => {
                       Role
                     </span>
                     <span className="text-sm font-black text-[#0D0D11] font-display mt-0.5 block">
-                      {selectedUser.role === 'HOMEOWNER' ? 'Homeowner' : 'Kasambahay'}
+                      {selectedUser.role === 'HOMEOWNER'
+                        ? 'Homeowner'
+                        : selectedUser.role === 'KASAMBAHAY'
+                          ? 'Kasambahay'
+                          : selectedUser.role === 'BARANGAY'
+                            ? 'Barangay Officer'
+                            : 'City SuperAdmin'}
                     </span>
                   </div>
 
