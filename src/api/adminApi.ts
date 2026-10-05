@@ -281,4 +281,71 @@ export async function fetchChatInbox(): Promise<ChatInboxEntry[]> {
   return [];
 }
 
+export interface ChangePasswordPayload {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
+export interface ChangePasswordResponse {
+  message?: string;
+  error?: string;
+}
+
+export async function changePasswordApi(payload: ChangePasswordPayload): Promise<ChangePasswordResponse> {
+  return fetchApi<ChangePasswordResponse>('/api/v1/accounts/change-password/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface DeskProfileResponse {
+  success?: boolean;
+  message?: string;
+  barangay?: string;
+  street?: string;
+  contact_number?: string;
+  user_about?: string;
+  first_name?: string;
+  last_name?: string;
+  officer_name?: string;
+  email?: string;
+  city?: string;
+  province?: string;
+  zipcode?: string;
+  profile?: {
+    barangay?: string;
+    street?: string;
+    contact_number?: string;
+    user_about?: string;
+    first_name?: string;
+    last_name?: string;
+    officer_name?: string;
+    email?: string;
+    city?: string;
+    province?: string;
+    zipcode?: string;
+  };
+  error?: string;
+}
+
+export async function fetchDeskProfileApi(barangay?: string): Promise<DeskProfileResponse> {
+  const query = barangay ? `?barangay=${encodeURIComponent(barangay)}` : '';
+  return fetchApi<DeskProfileResponse>(`/api/v1/accounts/admin/desk-profile/${query}`);
+}
+
+export async function updateDeskProfileApi(payload: {
+  street?: string;
+  contact_number?: string;
+  user_about?: string;
+  first_name?: string;
+  last_name?: string;
+  barangay?: string;
+}): Promise<DeskProfileResponse> {
+  return fetchApi<DeskProfileResponse>('/api/v1/accounts/admin/desk-profile/', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
 

@@ -318,8 +318,23 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (res && res.metrics) {
         setDashboardMetrics(res.metrics);
       }
-      // NOTE: barangays list is NOT populated from stats response anymore.
-      // It is exclusively managed by refreshLguBarangays() below.
+      if (res && Array.isArray(res.barangays) && res.barangays.length > 0) {
+        setBarangays((prev) => {
+          const statsMap = new Map(res.barangays.map((b) => [b.name.toLowerCase(), b]));
+          const merged: BarangayStats[] = res.barangays.map((b) => ({ ...b }));
+          prev.forEach((p) => {
+            if (!statsMap.has(p.name.toLowerCase())) {
+              merged.push(p);
+            }
+          });
+          try {
+            localStorage.setItem('serbisure_admin_barangays', JSON.stringify(merged));
+          } catch {
+            // ignore
+          }
+          return merged;
+        });
+      }
     } catch (err) {
       console.warn('[Admin API] Dashboard stats notice:', err);
     } finally {
@@ -340,20 +355,29 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         fetchAllUserBarangays()
       ]);
       if (names.length > 0) {
-        const asStats: BarangayStats[] = names.map((name) => ({
-          name,
-          totalWorkers: 0,
-          employed: 0,
-          available: 0,
-          employmentRatio: 0,
-          status: 'ACTIVE' as const,
-        }));
-        setBarangays(asStats);
-        try {
-          localStorage.setItem('serbisure_admin_barangays', JSON.stringify(asStats));
-        } catch {
-          // ignore storage errors
-        }
+        setBarangays((prev) => {
+          const prevMap = new Map(prev.map((b) => [b.name.toLowerCase(), b]));
+          const asStats: BarangayStats[] = names.map((name) => {
+            const existing = prevMap.get(name.toLowerCase());
+            if (existing) {
+              return { ...existing, status: 'ACTIVE' as const };
+            }
+            return {
+              name,
+              totalWorkers: 0,
+              employed: 0,
+              available: 0,
+              employmentRatio: 0,
+              status: 'ACTIVE' as const,
+            };
+          });
+          try {
+            localStorage.setItem('serbisure_admin_barangays', JSON.stringify(asStats));
+          } catch {
+            // ignore
+          }
+          return asStats;
+        });
       }
       if (allUserBgys.length > 0) {
         setUserBarangays(allUserBgys);
