@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Search, ChevronDown, Check, Building2, Shield, LogOut, MapPinOff } from 'lucide-react';
+import { ChevronDown, Check, Building2, Shield, LogOut, MapPinOff } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { AdminRole } from '../../types/admin';
 
 export const Header: React.FC = () => {
-  const { currentRole, setCurrentRole, selectedBarangay, setSelectedBarangay, barangays, searchQuery, setSearchQuery, currentUser, logout } = useAdmin();
+  const { currentRole, setCurrentRole, selectedBarangay, setSelectedBarangay, barangays, activeNav, currentUser, logout } = useAdmin();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const toggleRole = (role: AdminRole, brgy?: string) => {
@@ -25,27 +25,11 @@ export const Header: React.FC = () => {
 
   return (
     <header className="h-20 bg-white/80 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-30">
-      {/* Search Input Bar */}
-      <div className="relative w-full max-w-md">
-        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-zinc-400">
-          <Search className="w-4 h-4" />
-        </div>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search workers, records, verifications..."
-          className="w-full pl-11 pr-4 py-2.5 bg-[#F0F0EC] hover:bg-[#E8E8E3] focus:bg-white rounded-full text-xs font-medium text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#0D0D11]/15 transition-all border-0"
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            onClick={() => setSearchQuery('')}
-            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-zinc-400 hover:text-zinc-600 cursor-pointer"
-          >
-            <span className="w-4 h-4 rounded-full bg-zinc-300 hover:bg-zinc-400 text-white flex items-center justify-center text-[10px] font-bold">✕</span>
-          </button>
-        )}
+      {/* Page Title Header Indicator */}
+      <div className="flex items-center gap-2">
+        <span className="text-base font-black font-display text-[#0D0D11] tracking-tight capitalize">
+          {activeNav === 'dashboard' ? (currentRole === 'SUPERADMIN' ? 'City Dashboard' : `Brgy. ${selectedBarangay}`) : activeNav}
+        </span>
       </div>
 
       {/* Right Controls: Role Badge & Admin Profile */}

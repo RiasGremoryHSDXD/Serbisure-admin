@@ -1,4 +1,5 @@
-import { fetchApi } from './apiClient';
+import { fetchApi, sanitizeUserFriendlyError } from './apiClient';
+export { sanitizeUserFriendlyError };
 import { VerificationRequest, UserProfile, DashboardStatsResponse, BookingCompliance, AuditLogEntry, ChatInboxEntry } from '../types/admin';
 import type { ChatMessage } from '../types/admin';
 
@@ -148,6 +149,31 @@ export async function fetchAllUserBarangays(): Promise<string[]> {
   return Array.isArray(res.barangays) ? res.barangays : [];
 }
 
+export interface CreateBarangayPayload {
+  name: string;
+  region?: string;
+  province?: string;
+  city?: string;
+  street?: string;
+  contact_number?: string;
+  zipcode?: string;
+  country?: string;
+}
+
+export interface CreateBarangayResponse {
+  success?: boolean;
+  message?: string;
+  error?: string;
+  barangay?: any;
+}
+
+export async function createActiveBarangayApi(payload: CreateBarangayPayload): Promise<CreateBarangayResponse> {
+  return fetchApi<CreateBarangayResponse>('/api/v1/accounts/admin/active-barangays/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export interface VerificationStatusStats {
   verified: number;
   pending: number;
@@ -279,6 +305,73 @@ export async function fetchChatInbox(): Promise<ChatInboxEntry[]> {
   if (Array.isArray(res?.data)) return res.data;
   if (Array.isArray(res?.results)) return res.results;
   return [];
+}
+
+export interface ChangePasswordPayload {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
+export interface ChangePasswordResponse {
+  message?: string;
+  error?: string;
+}
+
+export async function changePasswordApi(payload: ChangePasswordPayload): Promise<ChangePasswordResponse> {
+  return fetchApi<ChangePasswordResponse>('/api/v1/accounts/change-password/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface DeskProfileResponse {
+  success?: boolean;
+  message?: string;
+  barangay?: string;
+  street?: string;
+  contact_number?: string;
+  user_about?: string;
+  first_name?: string;
+  last_name?: string;
+  officer_name?: string;
+  email?: string;
+  city?: string;
+  province?: string;
+  zipcode?: string;
+  profile?: {
+    barangay?: string;
+    street?: string;
+    contact_number?: string;
+    user_about?: string;
+    first_name?: string;
+    last_name?: string;
+    officer_name?: string;
+    email?: string;
+    city?: string;
+    province?: string;
+    zipcode?: string;
+  };
+  error?: string;
+}
+
+export async function fetchDeskProfileApi(barangay?: string): Promise<DeskProfileResponse> {
+  const query = barangay ? `?barangay=${encodeURIComponent(barangay)}` : '';
+  return fetchApi<DeskProfileResponse>(`/api/v1/accounts/admin/desk-profile/${query}`);
+}
+
+export async function updateDeskProfileApi(payload: {
+  street?: string;
+  contact_number?: string;
+  user_about?: string;
+  first_name?: string;
+  last_name?: string;
+  barangay?: string;
+}): Promise<DeskProfileResponse> {
+  return fetchApi<DeskProfileResponse>('/api/v1/accounts/admin/desk-profile/', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
 }
 
 

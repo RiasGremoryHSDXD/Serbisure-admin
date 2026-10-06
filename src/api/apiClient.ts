@@ -34,6 +34,57 @@ export function isCloudBackend(): boolean {
   return API_BASE_URL.includes('vercel.app');
 }
 
+/**
+ * Transforms raw database, network, and technical constraint errors into clear, friendly English.
+ */
+export function sanitizeUserFriendlyError(rawMessage: string): string {
+  if (!rawMessage || typeof rawMessage !== 'string') {
+    return 'An unexpected error occurred. Please try again.';
+  }
+
+  const lower = rawMessage.toLowerCase();
+
+  // Contact number duplicate / unique constraint
+  if (lower.includes('contact_number') && (lower.includes('duplicate') || lower.includes('already exists') || lower.includes('unique'))) {
+    const match = rawMessage.match(/\+?\d[\d\s-]{8,15}\d/);
+    const num = match ? match[0] : 'This contact number';
+    return `The contact number ${num} is already registered to another account. Please use a different hotline number.`;
+  }
+
+  // Barangay duplicate
+  if ((lower.includes('barangay') || lower.includes('unique_lgu_account')) && (lower.includes('already exists') || lower.includes('duplicate') || lower.includes('unique constraint'))) {
+    return 'This barangay is already registered in the directory. Each barangay can only have one official account.';
+  }
+
+  // Email duplicate
+  if (lower.includes('email') && (lower.includes('already exists') || lower.includes('duplicate') || lower.includes('unique constraint'))) {
+    return 'This email address is already in use by another account. Please use a different email.';
+  }
+
+  // Username duplicate
+  if (lower.includes('username') && (lower.includes('already exists') || lower.includes('duplicate') || lower.includes('unique constraint'))) {
+    return 'This username is already taken. Please choose another username.';
+  }
+
+  // General postgres constraint violation
+  if (lower.includes('violates unique constraint') || lower.includes('duplicate key value') || lower.includes('database constraint')) {
+    if (lower.includes('contact')) {
+      return 'The contact number entered is already registered. Please provide a different number.';
+    }
+    if (lower.includes('barangay')) {
+      return 'An official account for this barangay already exists in the system.';
+    }
+    return 'An account with these details already exists. Please verify the information and try again.';
+  }
+
+  // Null constraint
+  if (lower.includes('null value in column') || lower.includes('not-null constraint')) {
+    return 'Please complete all required fields before submitting.';
+  }
+
+  return rawMessage;
+}
+
 export interface FetchApiOptions extends RequestInit {
   timeoutMs?: number;
   maxRetries?: number;
@@ -136,7 +187,7 @@ export async function fetchApi<T>(endpoint: string, options: FetchApiOptions = {
           }
         }
 
-        throw new Error(message);
+        throw new Error(sanitizeUserFriendlyError(message));
       }
 
       return await response.json();

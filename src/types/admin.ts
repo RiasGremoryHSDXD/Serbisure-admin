@@ -8,11 +8,23 @@ export type VerificationStatus = 'PENDING / REVIEW' | 'VERIFIED' | 'REJECTED' | 
 
 export interface BarangayStats {
   name: string;
+  region?: string;
+  province?: string;
+  city?: string;
+  street?: string;
+  contact_number?: string;
+  zipcode?: string;
+  country?: string;
+  totalRegistered?: number;
   totalWorkers: number;
   employed: number;
   available: number;
   employmentRatio: number; // percentage, e.g. 82
   status: 'ACTIVE' | 'INACTIVE';
+  pending?: number;
+  verified?: number;
+  rejected?: number;
+  noDocuments?: number;
 }
 
 export interface DashboardMetrics {
@@ -243,4 +255,14 @@ export interface ChatInboxEntry {
   last_message_time: string;   // ISO 8601
   unread_count: number;
   sent_count: number;
+}
+
+export interface BarangayDeskProfile {
+  barangayName: string;      // read-only, taken from currentUser.barangay
+  address: string;           // maps to user.street (e.g. "Zone 5, Brgy. Pagatpat, Cagayan de Oro City")
+  hotline: string;           // maps to user.contact_number (e.g. "+639171234567")
+  officeHours: string;       // maps to user.user_about (e.g. "Mon–Fri, 8:00 AM – 5:00 PM")
+  officerName?: string;      // maps to user.first_name + user.last_name
+  email?: string;            // maps to user.email
+  lastUpdated?: string;      // ISO timestamp string
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AdminProvider, useAdmin } from './context/AdminContext';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
@@ -10,11 +10,15 @@ import { LoginPage } from './pages/LoginPage';
 
 const MainLayout: React.FC = () => {
   const { activeNav } = useAdmin();
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   return (
     <div className={`flex bg-[#F6F5F2] ${activeNav === 'users' ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
       {/* Fixed/Sticky Sidebar matching mockups */}
-      <Sidebar />
+      <Sidebar 
+        isSidebarCollapsed={isSidebarCollapsed} 
+        setIsSidebarCollapsed={setIsSidebarCollapsed} 
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
