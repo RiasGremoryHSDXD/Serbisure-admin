@@ -95,54 +95,54 @@ function escapeHtml(val: unknown): string {
 
 function getDeploymentStatusPill(status: string): string {
   const s = (status || '').toUpperCase();
-  let style = 'background:#F1F5F9; color:#475569; border:1px solid #CBD5E1;';
+  let color = '#475569';
   let label = status || 'Pending';
   if (s.includes('COMPLIANT')) {
-    style = 'background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0;';
+    color = '#059669';
     label = 'RA 10361 Compliant';
   } else if (s.includes('BELOW_MINIMUM_WAGE') || s.includes('BELOW')) {
-    style = 'background:#FEF2F2; color:#991B1B; border:1px solid #FECACA;';
+    color = '#DC2626';
     label = 'Below Min. Wage';
   } else if (s.includes('FLAGGED') || s.includes('THROTTLED')) {
-    style = 'background:#FFFBEB; color:#92400E; border:1px solid #FDE68A;';
+    color = '#D97706';
     label = 'Flagged / Review';
   } else if (s.includes('ACTIVE')) {
-    style = 'background:#EFF6FF; color:#1E40AF; border:1px solid #BFDBFE;';
+    color = '#2563EB';
     label = 'Active Deployment';
   } else if (s.includes('PENDING')) {
-    style = 'background:#FFFBEB; color:#92400E; border:1px solid #FDE68A;';
+    color = '#D97706';
     label = 'Pending Review';
   }
-  return `<span class="pill" style="${style}">${escapeHtml(label)}</span>`;
+  return `<span class="pill" style="color: ${color};">${escapeHtml(label)}</span>`;
 }
 
 function getVerificationStatusPill(status: string): string {
   const s = (status || '').toUpperCase();
   if (s.includes('VERIFIED') || s.includes('APPROVED')) {
-    return `<span class="pill" style="background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0;">Verified</span>`;
+    return `<span class="pill" style="color: #059669;">Verified</span>`;
   }
   if (s.includes('REJECTED')) {
-    return `<span class="pill" style="background:#FEF2F2; color:#991B1B; border:1px solid #FECACA;">Rejected</span>`;
+    return `<span class="pill" style="color: #DC2626;">Rejected</span>`;
   }
   if (s.includes('PENDING') || s.includes('REVIEW')) {
-    return `<span class="pill" style="background:#FFFBEB; color:#92400E; border:1px solid #FDE68A;">In Review</span>`;
+    return `<span class="pill" style="color: #D97706;">In Review</span>`;
   }
-  return `<span class="pill" style="background:#F1F5F9; color:#475569; border:1px solid #CBD5E1;">${escapeHtml(status || 'Pending')}</span>`;
+  return `<span class="pill" style="color: #475569;">${escapeHtml(status || 'Pending')}</span>`;
 }
 
 function getAuditActionPill(action: string): string {
   const a = (action || '').toUpperCase();
-  let style = 'background:#F1F5F9; color:#475569; border:1px solid #CBD5E1;';
+  let color = '#475569';
   if (a.includes('APPROV') || a.includes('VERIF')) {
-    style = 'background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0;';
+    color = '#059669';
   } else if (a.includes('REJECT') || a.includes('DELET')) {
-    style = 'background:#FEF2F2; color:#991B1B; border:1px solid #FECACA;';
+    color = '#DC2626';
   } else if (a.includes('RESET')) {
-    style = 'background:#FFFBEB; color:#92400E; border:1px solid #FDE68A;';
+    color = '#D97706';
   } else if (a.includes('UPLOAD')) {
-    style = 'background:#EFF6FF; color:#1E40AF; border:1px solid #BFDBFE;';
+    color = '#2563EB';
   }
-  return `<span class="pill" style="${style}">${escapeHtml(action || 'ACTION')}</span>`;
+  return `<span class="pill" style="color: ${color};">${escapeHtml(action || 'ACTION')}</span>`;
 }
 
 function formatReason(raw?: string | null): string {
@@ -338,17 +338,12 @@ function buildPdfReport(
       .report-wrapper * { box-sizing: border-box; }
       .brand-badge {
         display: inline-block;
-        background: #F1F5F9;
-        border: 1px solid #CBD5E1;
-        padding: 5px 14px;
-        border-radius: 999px;
-        margin-bottom: 12px;
         font-size: 11px;
-        font-weight: 700;
-        color: #1E293B;
-        letter-spacing: 0.6px;
+        font-weight: 800;
+        color: #475569;
+        letter-spacing: 0.8px;
         text-transform: uppercase;
-        line-height: 1.4;
+        margin-bottom: 8px;
         white-space: nowrap;
       }
       .report-title {
@@ -459,50 +454,35 @@ function buildPdfReport(
       }
       .pill {
         display: inline-block;
-        padding: 4px 12px;
-        border-radius: 999px;
-        font-size: 11px;
-        font-weight: 700;
+        font-size: 12px;
+        font-weight: 800;
         letter-spacing: 0.2px;
         white-space: nowrap;
         text-align: center;
-        line-height: 1.2;
-        vertical-align: middle;
+        line-height: 1.4;
       }
       .contract-badge {
         display: inline-block;
-        background: #F1F5F9;
         color: #334155;
-        border: 1px solid #CBD5E1;
-        font-weight: 600;
-        font-size: 11px;
-        padding: 3px 10px;
-        border-radius: 6px;
+        font-weight: 700;
+        font-size: 11.5px;
         white-space: nowrap;
         text-align: center;
-        line-height: 1.2;
-        vertical-align: middle;
+        line-height: 1.4;
       }
       .role-badge {
         display: inline-block;
         font-weight: 700;
-        font-size: 11px;
-        padding: 3px 10px;
-        border-radius: 6px;
+        font-size: 11.5px;
         white-space: nowrap;
         text-align: center;
-        line-height: 1.2;
-        vertical-align: middle;
+        line-height: 1.4;
       }
       .role-kasambahay {
-        background: #EFF6FF;
         color: #1E40AF;
-        border: 1px solid #BFDBFE;
       }
       .role-homeowner {
-        background: #FAF5FF;
-        color: #6B21A8;
-        border: 1px solid #E9D5FF;
+        color: #7E22CE;
       }
       .footer-table {
         width: 100%;
