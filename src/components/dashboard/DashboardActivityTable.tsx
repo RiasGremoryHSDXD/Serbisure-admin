@@ -1,4 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import clsx from 'clsx';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { 
   Search, 
   Calendar, 
@@ -92,46 +95,67 @@ function escapeHtml(val: unknown): string {
 
 function getDeploymentStatusPill(status: string): string {
   const s = (status || '').toUpperCase();
-  let style = 'background:#f4f4f5;color:#3f3f46;';
+  let color = '#475569';
+  let label = status || 'Pending';
   if (s.includes('COMPLIANT')) {
-    style = 'background:#d1fae5;color:#065f46;';
+    color = '#059669';
+    label = 'RA 10361 Compliant';
   } else if (s.includes('BELOW_MINIMUM_WAGE') || s.includes('BELOW')) {
-    style = 'background:#ffe4e6;color:#9f1239;';
+    color = '#DC2626';
+    label = 'Below Min. Wage';
   } else if (s.includes('FLAGGED') || s.includes('THROTTLED')) {
-    style = 'background:#fef3c7;color:#92400e;';
+    color = '#D97706';
+    label = 'Flagged / Review';
   } else if (s.includes('ACTIVE')) {
-    style = 'background:#dbeafe;color:#1e40af;';
+    color = '#2563EB';
+    label = 'Active Deployment';
+  } else if (s.includes('PENDING')) {
+    color = '#D97706';
+    label = 'Pending Review';
   }
-  return `<span class="pill" style="${style}">${escapeHtml(status || 'Pending')}</span>`;
+  return `<span class="pill" style="color: ${color};">${escapeHtml(label)}</span>`;
 }
 
 function getVerificationStatusPill(status: string): string {
   const s = (status || '').toUpperCase();
   if (s.includes('VERIFIED') || s.includes('APPROVED')) {
-    return `<span class="pill" style="background:#d1fae5;color:#065f46;">Verified</span>`;
+    return `<span class="pill" style="color: #059669;">Verified</span>`;
   }
   if (s.includes('REJECTED')) {
-    return `<span class="pill" style="background:#ffe4e6;color:#9f1239;">Rejected</span>`;
+    return `<span class="pill" style="color: #DC2626;">Rejected</span>`;
   }
   if (s.includes('PENDING') || s.includes('REVIEW')) {
-    return `<span class="pill" style="background:#fef3c7;color:#92400e;">In Review</span>`;
+    return `<span class="pill" style="color: #D97706;">In Review</span>`;
   }
-  return `<span class="pill" style="background:#f4f4f5;color:#3f3f46;">${escapeHtml(status || 'Pending')}</span>`;
+  return `<span class="pill" style="color: #475569;">${escapeHtml(status || 'Pending')}</span>`;
 }
 
 function getAuditActionPill(action: string): string {
   const a = (action || '').toUpperCase();
-  let style = 'background:#f4f4f5;color:#3f3f46;';
+  let color = '#475569';
   if (a.includes('APPROV') || a.includes('VERIF')) {
-    style = 'background:#d1fae5;color:#065f46;';
+    color = '#059669';
   } else if (a.includes('REJECT') || a.includes('DELET')) {
-    style = 'background:#ffe4e6;color:#9f1239;';
+    color = '#DC2626';
   } else if (a.includes('RESET')) {
-    style = 'background:#fef3c7;color:#92400e;';
+    color = '#D97706';
   } else if (a.includes('UPLOAD')) {
-    style = 'background:#e0f2fe;color:#0369a1;';
+    color = '#2563EB';
   }
-  return `<span class="pill" style="${style}">${escapeHtml(action || 'ACTION')}</span>`;
+  return `<span class="pill" style="color: ${color};">${escapeHtml(action || 'ACTION')}</span>`;
+}
+
+function formatReason(raw?: string | null): string {
+  if (!raw || !raw.trim()) return '—';
+  const trimmed = raw.trim();
+  return trimmed.length > 120 ? trimmed.slice(0, 120) + '...' : trimmed;
+}
+
+function formatStatusTransition(prev?: string | null, next?: string | null): string {
+  if (!prev && !next) return '—';
+  const p = prev || 'Pending';
+  const n = next || 'Updated';
+  return `<span style="font-weight:700;color:#64748B;">${escapeHtml(p)}</span> <span style="color:#94A3B8;font-weight:900;margin:0 4px;">&rarr;</span> <span style="font-weight:700;color:#0F172A;">${escapeHtml(n)}</span>`;
 }
 
 function buildPdfReport(
@@ -142,190 +166,414 @@ function buildPdfReport(
   meta: { barangay: string; generatedAt: string; searchTerm: string }
 ): string {
   let title = '';
+  let subtitle = '';
   let count = 0;
   let tableHeaders = '';
   let tableRows = '';
+  let colSpan = 6;
+
+  const barangayDisplay = meta.barangay && meta.barangay !== 'All Barangays'
+    ? `Barangay ${meta.barangay}`
+    : 'All Barangays (City-Wide)';
 
   if (tab === 'DEPLOYMENTS') {
     title = 'Placement & Bookings Compliance Report';
+    subtitle = 'Republic Act No. 10361 (Batas Kasambahay) Mandatory Wage Baseline & Employment Placement Register';
     count = filteredBookings.length;
+    colSpan = 6;
     tableHeaders = `
-      <th style="width:40px;">#</th>
-      <th>Employer</th>
-      <th>Kasambahay / Worker</th>
-      <th>Monthly Wage</th>
-      <th>Contract Type</th>
-      <th>Status</th>
+      <th style="width: 5%; text-align: center;">#</th>
+      <th style="width: 25%;">Employer / Household</th>
+      <th style="width: 25%;">Kasambahay / Worker</th>
+      <th style="width: 17%;">Monthly Wage</th>
+      <th style="width: 14%; text-align: center;">Contract Type</th>
+      <th style="width: 14%; text-align: center;">Compliance Status</th>
     `;
     tableRows = filteredBookings.map((b, idx) => {
-      const employerName = b.homeownerName || 'Unassigned';
-      const employerSub = b.barangay ? `Barangay ${b.barangay}` : '';
-      const workerName = b.workerName || 'Unassigned';
-      const workerSub = b.serviceCategory || '';
-      const wageDisplay = b.offeredWage != null ? `₱${Number(b.offeredWage).toLocaleString()} / mo` : '—';
-      const contract = b.contractType || '—';
+      const employerName = b.homeownerName || 'Unassigned Employer';
+      const employerSub = b.barangay ? `Barangay ${b.barangay}` : 'Barangay Not Specified';
+      const workerName = b.workerName || 'Unassigned Worker';
+      const workerSub = b.serviceCategory || 'Domestic Worker';
+      const wageDisplay = b.offeredWage != null ? `₱${Number(b.offeredWage).toLocaleString()}` : '—';
+      const isBelowWage = Boolean(b.isBelowMinimumWage);
+      const contract = b.contractType || 'Standard Agreement';
       const contractDisplay = contract.includes('Formal')
         ? 'Formal (Long-Term)'
         : contract.includes('Short')
-        ? 'Short-Term'
+        ? 'Short-Term On-Demand'
         : contract;
       const rawStatus = b.bookingStatus || b.status || 'Pending';
 
       return `
         <tr>
-          <td style="color:#71717a;font-weight:700;">${idx + 1}</td>
+          <td style="text-align: center; color: #94A3B8; font-weight: 700;">${idx + 1}</td>
           <td>
-            <span class="name-bold">${escapeHtml(employerName)}</span>
-            ${employerSub ? `<span class="sub-text">${escapeHtml(employerSub)}</span>` : ''}
+            <div class="name-bold">${escapeHtml(employerName)}</div>
+            <div class="sub-text">${escapeHtml(employerSub)}</div>
           </td>
           <td>
-            <span class="name-bold">${escapeHtml(workerName)}</span>
-            ${workerSub ? `<span class="sub-text">${escapeHtml(workerSub)}</span>` : ''}
+            <div class="name-bold">${escapeHtml(workerName)}</div>
+            <div class="sub-text">${escapeHtml(workerSub)}</div>
           </td>
-          <td style="font-weight:700;color:#0D0D11;">${escapeHtml(wageDisplay)}</td>
-          <td>${escapeHtml(contractDisplay)}</td>
-          <td>${getDeploymentStatusPill(rawStatus)}</td>
+          <td>
+            <div style="font-weight: 800; font-size: 13px; color: #0F172A;">
+              ${escapeHtml(wageDisplay)} <span style="font-weight: 500; font-size: 11px; color: #64748B;">/ month</span>
+            </div>
+            ${isBelowWage 
+              ? '<div style="font-size: 10px; font-weight: 700; color: #DC2626; margin-top: 3px;">⚠️ Below RA 10361 Min. Wage</div>' 
+              : '<div style="font-size: 10px; font-weight: 700; color: #059669; margin-top: 3px;">✅ Wage Compliant</div>'}
+          </td>
+          <td style="text-align: center;">
+            <span class="contract-badge">${escapeHtml(contractDisplay)}</span>
+          </td>
+          <td style="text-align: center;">${getDeploymentStatusPill(rawStatus)}</td>
         </tr>
       `;
     }).join('');
   } else if (tab === 'VERIFICATIONS') {
     title = 'Clearance & Document Verification Report';
+    subtitle = 'Official Kasambahay & Homeowner Regulatory Identity Screening & Document Clearance Queue';
     count = filteredVerifications.length;
+    colSpan = 7;
     tableHeaders = `
-      <th style="width:40px;">#</th>
-      <th>Applicant</th>
-      <th>Role</th>
-      <th>Document Type</th>
-      <th>Barangay</th>
-      <th>Submitted Date</th>
-      <th>Status</th>
+      <th style="width: 5%; text-align: center;">#</th>
+      <th style="width: 24%;">Applicant Name</th>
+      <th style="width: 12%; text-align: center;">Account Role</th>
+      <th style="width: 22%;">Document Type</th>
+      <th style="width: 15%;">Assigned Barangay</th>
+      <th style="width: 11%; text-align: center;">Date Submitted</th>
+      <th style="width: 11%; text-align: center;">Review Status</th>
     `;
     tableRows = filteredVerifications.map((v, idx) => {
       const applicantName = v.name || '—';
-      const applicantSub = v.documentNumber ? `Doc #: ${v.documentNumber}` : '';
+      const applicantSub = v.documentNumber ? `ID/Doc #: ${v.documentNumber}` : 'Standard Upload';
       const roleDisplay = v.role === 'KASAMBAHAY' ? 'Kasambahay' : v.role === 'HOMEOWNER' ? 'Homeowner' : (v.role || '—');
       const docDisplay = formatDocType(v.documentType);
-      const brgyDisplay = v.barangay || '—';
+      const brgyDisplay = v.barangay ? `Brgy. ${v.barangay}` : 'Barangay Not Stated';
       const dateDisplay = v.submittedDate || '—';
       const rawStatus = v.status || 'Pending';
 
       return `
         <tr>
-          <td style="color:#71717a;font-weight:700;">${idx + 1}</td>
+          <td style="text-align: center; color: #94A3B8; font-weight: 700;">${idx + 1}</td>
           <td>
-            <span class="name-bold">${escapeHtml(applicantName)}</span>
-            ${applicantSub ? `<span class="sub-text">${escapeHtml(applicantSub)}</span>` : ''}
+            <div class="name-bold">${escapeHtml(applicantName)}</div>
+            <div class="sub-text">${escapeHtml(applicantSub)}</div>
           </td>
-          <td>${escapeHtml(roleDisplay)}</td>
-          <td>${escapeHtml(docDisplay)}</td>
-          <td>${escapeHtml(brgyDisplay)}</td>
-          <td>${escapeHtml(dateDisplay)}</td>
-          <td>${getVerificationStatusPill(rawStatus)}</td>
+          <td style="text-align: center;">
+            <span class="role-badge ${v.role === 'KASAMBAHAY' ? 'role-kasambahay' : 'role-homeowner'}">
+              ${escapeHtml(roleDisplay)}
+            </span>
+          </td>
+          <td>
+            <div style="font-weight: 600; color: #1E293B;">${escapeHtml(docDisplay)}</div>
+          </td>
+          <td>
+            <div style="font-weight: 600; color: #334155;">${escapeHtml(brgyDisplay)}</div>
+          </td>
+          <td style="text-align: center; color: #64748B; font-weight: 500;">${escapeHtml(dateDisplay)}</td>
+          <td style="text-align: center;">${getVerificationStatusPill(rawStatus)}</td>
         </tr>
       `;
     }).join('');
   } else if (tab === 'AUDIT_TRAIL') {
-    title = 'System Audit Trail Report';
+    title = 'System Audit Trail & Administrative Activity Log';
+    subtitle = 'Official Immutable Record of Administrative Reviews, Verifications, and Account Actions';
     count = filteredAuditLogs.length;
+    colSpan = 7;
     tableHeaders = `
-      <th style="width:40px;">#</th>
-      <th>Official / Actor</th>
-      <th>Action</th>
-      <th>Resident & Document</th>
-      <th>Status Change</th>
-      <th>Reason</th>
-      <th>Timestamp</th>
+      <th style="width: 4%; text-align: center;">#</th>
+      <th style="width: 18%;">Official / Actor</th>
+      <th style="width: 11%; text-align: center;">Action</th>
+      <th style="width: 24%;">Target Resident & Document</th>
+      <th style="width: 16%;">Status Transition</th>
+      <th style="width: 15%;">Reason / Remarks</th>
+      <th style="width: 12%;">Recorded Timestamp</th>
     `;
     tableRows = filteredAuditLogs.map((a, idx) => {
-      const actorName = a.actor_name || 'System';
-      const actorSub = [a.actor_role, a.actor_barangay].filter(Boolean).join(' • ') || 'System Admin';
+      const actorName = a.actor_name || 'System Administrator';
+      const actorSub = [a.actor_role, a.actor_barangay ? `Brgy. ${a.actor_barangay}` : ''].filter(Boolean).join(' • ') || 'LGU Administration';
       const actionPill = getAuditActionPill(a.action);
-      const targetName = a.target_name || '—';
-      const targetSub = [formatDocType(a.document_type), a.target_barangay].filter(Boolean).join(' • ') || '—';
-      const statusChange = (a.previous_status || a.new_status)
-        ? `${a.previous_status || 'Pending'} → ${a.new_status || 'Updated'}`
-        : '—';
-      const rawReason = a.reason || '—';
-      const reasonDisplay = rawReason.length > 60 ? rawReason.slice(0, 60) + '...' : rawReason;
+      const targetName = a.target_name || 'Resident';
+      const targetSub = [formatDocType(a.document_type), a.target_barangay ? `Brgy. ${a.target_barangay}` : ''].filter(Boolean).join(' • ') || '—';
+      const statusChange = formatStatusTransition(a.previous_status, a.new_status);
+      const reasonDisplay = formatReason(a.reason);
       const timeDisplay = formatAuditDate(a.created_at);
-      const logSub = a.log_id ? `Log #${String(a.log_id).slice(-6)}` : '';
+      const logSub = a.log_id ? `ID #${String(a.log_id).slice(-6)}` : '';
 
       return `
         <tr>
-          <td style="color:#71717a;font-weight:700;">${idx + 1}</td>
+          <td style="text-align: center; color: #94A3B8; font-weight: 700;">${idx + 1}</td>
           <td>
-            <span class="name-bold">${escapeHtml(actorName)}</span>
-            <span class="sub-text">${escapeHtml(actorSub)}</span>
+            <div class="name-bold">${escapeHtml(actorName)}</div>
+            <div class="sub-text">${escapeHtml(actorSub)}</div>
           </td>
-          <td>${actionPill}</td>
+          <td style="text-align: center;">${actionPill}</td>
           <td>
-            <span class="name-bold">${escapeHtml(targetName)}</span>
-            <span class="sub-text">${escapeHtml(targetSub)}</span>
+            <div class="name-bold">${escapeHtml(targetName)}</div>
+            <div class="sub-text">${escapeHtml(targetSub)}</div>
           </td>
-          <td style="font-weight:600;color:#27272a;">${escapeHtml(statusChange)}</td>
-          <td style="color:#52525b;max-width:200px;">${escapeHtml(reasonDisplay)}</td>
           <td>
-            <span class="name-bold">${escapeHtml(timeDisplay)}</span>
-            ${logSub ? `<span class="sub-text">${escapeHtml(logSub)}</span>` : ''}
+            <div style="font-size: 11.5px;">${statusChange}</div>
+          </td>
+          <td>
+            <div style="color: ${reasonDisplay === '—' ? '#94A3B8' : '#334155'}; font-size: 11px; line-height: 1.4; word-break: break-word;">${escapeHtml(reasonDisplay)}</div>
+          </td>
+          <td>
+            <div style="font-weight: 700; color: #1E293B;">${escapeHtml(timeDisplay)}</div>
+            ${logSub ? `<div class="sub-text" style="font-family: monospace; font-size: 10px; color: #94A3B8;">${escapeHtml(logSub)}</div>` : ''}
           </td>
         </tr>
       `;
     }).join('');
   }
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeHtml(title)}</title>
-  <style>
-    @page { size: landscape; margin: 12mm; }
-    body { font-family: system-ui,-apple-system,sans-serif; background:#F6F5F2; margin:0; padding:20px; color:#0D0D11; }
-    .header { margin-bottom:24px; border-bottom:2px solid #FFB380; padding-bottom:16px; }
-    .sys-name { font-size:11px; font-weight:700; color:#FFB380; text-transform:uppercase; letter-spacing:2px; }
-    .report-title { font-size:24px; font-weight:900; color:#0D0D11; margin:4px 0; }
-    .meta { font-size:12px; color:#52525b; margin:2px 0; }
-    .meta-filter { color:#d97706; font-style:italic; }
-    table { width:100%; border-collapse:collapse; font-size:12px; background:white; border-radius:8px; overflow:hidden; }
-    thead tr { background:#0D0D11; color:white; }
-    th { padding:10px 12px; text-align:left; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap; }
-    td { padding:10px 12px; border-bottom:1px solid #f4f4f5; vertical-align:top; }
-    tr:last-child td { border-bottom:none; }
-    tr:nth-child(even) { background:#fafafa; }
-    .pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; }
-    .name-bold { font-weight:700; display:block; }
-    .sub-text { font-size:10px; color:#71717a; display:block; margin-top:2px; }
-    .footer { margin-top:24px; padding-top:12px; border-top:1px solid #e4e4e7; display:flex; justify-content:space-between; font-size:10px; color:#71717a; }
-    @media print { body { background:white; } }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="sys-name">SerbiSure LGU Dashboard</div>
-    <div class="report-title">${escapeHtml(title)}</div>
-    <div class="meta">Barangay: <strong>${escapeHtml(meta.barangay)}</strong></div>
-    <div class="meta">Generated: <strong>${escapeHtml(meta.generatedAt)}</strong></div>
-    <div class="meta">Records exported: <strong>${count}</strong></div>
-    ${meta.searchTerm ? `<div class="meta meta-filter">Search filter: &laquo;${escapeHtml(meta.searchTerm)}&raquo;</div>` : ''}
-  </div>
+  const classification = meta.searchTerm 
+    ? `Filtered by "${meta.searchTerm}"` 
+    : 'All Recorded Entries (Unfiltered)';
 
-  <table>
-    <thead>
+  return `
+  <div class="report-wrapper" style="box-sizing: border-box; width: 1400px; background: #FFFFFF; padding: 48px 56px 72px 56px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #0F172A; line-height: 1.5; overflow: hidden;">
+    <style>
+      .report-wrapper * { box-sizing: border-box; }
+      .brand-badge {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 800;
+        color: #475569;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        white-space: nowrap;
+      }
+      .report-title {
+        font-size: 26px;
+        font-weight: 900;
+        color: #0F172A;
+        letter-spacing: -0.5px;
+        margin: 0 0 6px 0;
+      }
+      .report-subtitle {
+        font-size: 12.5px;
+        font-weight: 500;
+        color: #64748B;
+        margin: 0;
+      }
+      .logo-title {
+        font-size: 24px;
+        font-weight: 900;
+        letter-spacing: -0.5px;
+        color: #0F172A;
+      }
+      .logo-orange {
+        color: #FF7A00;
+      }
+      .logo-sub {
+        font-size: 10px;
+        font-weight: 700;
+        color: #94A3B8;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        margin-top: 2px;
+      }
+      .meta-grid {
+        width: 100%;
+        table-layout: fixed;
+        margin-top: 24px;
+        margin-bottom: 28px;
+        border-collapse: separate;
+        border-spacing: 12px 0;
+      }
+      .meta-card {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 10px;
+        padding: 12px 16px;
+        vertical-align: top;
+      }
+      .meta-card-label {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.7px;
+        color: #94A3B8;
+        margin-bottom: 4px;
+      }
+      .meta-card-val {
+        font-size: 13px;
+        font-weight: 800;
+        color: #0F172A;
+      }
+      table.data-table {
+        width: 100%;
+        table-layout: fixed;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      table.data-table thead tr {
+        background: #0F172A;
+      }
+      table.data-table th {
+        padding: 14px 16px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: #FFFFFF;
+        border-bottom: 3px solid #FF7A00;
+        text-align: left;
+      }
+      table.data-table td {
+        padding: 14px 16px;
+        font-size: 12px;
+        border-bottom: 1px solid #F1F5F9;
+        vertical-align: middle;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      table.data-table tbody tr:nth-child(even) td {
+        background: #FAFAFA;
+      }
+      table.data-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .name-bold {
+        font-weight: 700;
+        font-size: 12.5px;
+        color: #0F172A;
+      }
+      .sub-text {
+        font-size: 10.5px;
+        font-weight: 500;
+        color: #64748B;
+        margin-top: 3px;
+      }
+      .pill {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+        text-align: center;
+        line-height: 1.4;
+      }
+      .contract-badge {
+        display: inline-block;
+        color: #334155;
+        font-weight: 700;
+        font-size: 11.5px;
+        white-space: nowrap;
+        text-align: center;
+        line-height: 1.4;
+      }
+      .role-badge {
+        display: inline-block;
+        font-weight: 700;
+        font-size: 11.5px;
+        white-space: nowrap;
+        text-align: center;
+        line-height: 1.4;
+      }
+      .role-kasambahay {
+        color: #1E40AF;
+      }
+      .role-homeowner {
+        color: #7E22CE;
+      }
+      .footer-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 36px;
+        padding-top: 18px;
+        border-top: 1.5px solid #E2E8F0;
+        background: transparent;
+      }
+      .footer-table td {
+        border: none;
+        padding: 0;
+        vertical-align: middle;
+      }
+    </style>
+
+    <!-- Top Brand & Header Table -->
+    <table style="width: 100%; border-collapse: collapse; border: none; background: transparent; margin-bottom: 4px;">
       <tr>
-        ${tableHeaders}
+        <td style="border: none; padding: 0; vertical-align: top;">
+          <span class="brand-badge">Republic of the Philippines &bull; City of Cagayan de Oro &bull; LGU Administration</span>
+          <h1 class="report-title">${escapeHtml(title)}</h1>
+          <p class="report-subtitle">${escapeHtml(subtitle)}</p>
+        </td>
+        <td style="border: none; padding: 0; vertical-align: top; text-align: right; width: 280px;">
+          <div class="logo-title">Serbi<span class="logo-orange">Sure</span>.</div>
+          <div class="logo-sub">City Administration Portal</div>
+          <div style="font-size: 11px; font-weight: 600; color: #475569; margin-top: 6px;">
+            Official Registry Document
+          </div>
+        </td>
       </tr>
-    </thead>
-    <tbody>
-      ${tableRows || '<tr><td colspan="7" style="text-align:center;padding:24px;color:#71717a;">No records found</td></tr>'}
-    </tbody>
-  </table>
+    </table>
 
-  <div class="footer">
-    <span>This report is auto-generated by SerbiSure and is for official LGU use only.</span>
-    <span>Page 1 of 1</span>
+    <!-- 4-Card Meta / KPI Grid (100% width edge-to-edge) -->
+    <table class="meta-grid">
+      <tr>
+        <td class="meta-card" style="width: 25%;">
+          <div class="meta-card-label">Assigned Jurisdiction</div>
+          <div class="meta-card-val">${escapeHtml(barangayDisplay)}</div>
+        </td>
+        <td class="meta-card" style="width: 25%;">
+          <div class="meta-card-label">Date &amp; Time Generated</div>
+          <div class="meta-card-val">${escapeHtml(meta.generatedAt)}</div>
+        </td>
+        <td class="meta-card" style="width: 25%;">
+          <div class="meta-card-label">Total Records Exported</div>
+          <div class="meta-card-val" style="color: #EA580C;">${count} Record${count === 1 ? '' : 's'}</div>
+        </td>
+        <td class="meta-card" style="width: 25%;">
+          <div class="meta-card-label">Report Classification</div>
+          <div class="meta-card-val">${escapeHtml(classification)}</div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Primary Data Table (Occupies 100% width edge-to-edge) -->
+    <table class="data-table">
+      <thead>
+        <tr>
+          ${tableHeaders}
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows || `<tr><td colspan="${colSpan}" style="text-align:center; padding:36px; color:#94A3B8; font-weight:600; font-size:13px;">No data records found for current filters</td></tr>`}
+      </tbody>
+    </table>
+
+    <!-- Official Document Footer Table (Bulletproof layout for html2canvas) -->
+    <table class="footer-table">
+      <tr>
+        <td style="text-align: left;">
+          <div style="font-size: 11px; font-weight: 700; color: #475569;">
+            Official LGU Compliance Record &bull; Generated via SerbiSure Management Portal
+          </div>
+          <div style="font-size: 10px; color: #94A3B8; margin-top: 4px; line-height: 1.4;">
+            Confidential Document &bull; Protected under Republic Act No. 10361 (Batas Kasambahay) and Republic Act No. 10173 (Data Privacy Act of 2012).
+          </div>
+        </td>
+        <td style="text-align: right; width: 340px;">
+          <div style="font-size: 11px; font-weight: 700; color: #475569;">
+            City Government of Cagayan de Oro
+          </div>
+          <div style="font-size: 10px; color: #94A3B8; margin-top: 4px;">
+            Official Administrative Export &bull; Verified Registry Copy
+          </div>
+        </td>
+      </tr>
+    </table>
   </div>
-</body>
-</html>`;
+  `;
 }
 
 export const DashboardActivityTable: React.FC = () => {
@@ -336,6 +584,8 @@ export const DashboardActivityTable: React.FC = () => {
   const [verificationsPage, setVerificationsPage] = useState(1);
   const [auditPage, setAuditPage] = useState(1);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const exportContainerRef = useRef<HTMLDivElement>(null);
 
   // Scope to assigned barangay if logged in as local LGU officer
   const scopedVerifications = useMemo(() => {
@@ -516,7 +766,7 @@ export const DashboardActivityTable: React.FC = () => {
     );
   };
 
-  const handleExport = () => {
+  const handleExportPdf = async () => {
     const isEmpty = 
       (activeTab === 'DEPLOYMENTS' && filteredBookings.length === 0) ||
       (activeTab === 'VERIFICATIONS' && filteredVerifications.length === 0) ||
@@ -527,6 +777,23 @@ export const DashboardActivityTable: React.FC = () => {
       setTimeout(() => setExportMessage(null), 3000);
       return;
     }
+
+    if (!exportContainerRef.current) {
+      setExportMessage('Export failed. Please try again.');
+      setTimeout(() => setExportMessage(null), 4000);
+      return;
+    }
+
+    setIsExporting(true);
+
+    const TAB_LABELS: Record<string, string> = {
+      DEPLOYMENTS: 'placements-bookings',
+      VERIFICATIONS: 'verifications',
+      AUDIT_TRAIL: 'audit-trail',
+    };
+    const tabLabel = TAB_LABELS[activeTab] ?? 'report';
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `serbisure-report-${tabLabel}-${dateStr}.pdf`;
 
     const barangay = selectedBarangay || 'All Barangays';
     const generatedAt = new Date().toLocaleString('en-US', {
@@ -546,22 +813,44 @@ export const DashboardActivityTable: React.FC = () => {
       { barangay, generatedAt, searchTerm }
     );
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      setExportMessage('Please allow pop-ups for this site to download the PDF.');
+    try {
+      exportContainerRef.current.innerHTML = htmlString;
+      const canvas = await html2canvas(exportContainerRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#FFFFFF',
+        windowWidth: 1400,
+        scrollX: 0,
+        scrollY: 0,
+      });
+      const orientation = canvas.width >= canvas.height ? 'landscape' : 'portrait';
+      const pdf = new jsPDF({
+        orientation,
+        unit: 'px',
+        format: [canvas.width, canvas.height],
+      });
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(filename);
+      exportContainerRef.current.innerHTML = '';
+      setExportMessage('✓ Report downloaded successfully.');
+      setTimeout(() => setExportMessage(null), 3000);
+    } catch {
+      if (exportContainerRef.current) exportContainerRef.current.innerHTML = '';
+      setExportMessage('Export failed. Please try again.');
       setTimeout(() => setExportMessage(null), 4000);
-      return;
+    } finally {
+      setIsExporting(false);
     }
-    printWindow.document.write(htmlString);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-
-    setExportMessage('PDF report opened — use "Save as PDF" in the print dialog.');
-    setTimeout(() => setExportMessage(null), 4000);
   };
 
-  const isExportWarning = Boolean(exportMessage && (exportMessage.startsWith('No data') || exportMessage.startsWith('Please allow')));
+  const isExportWarning = Boolean(
+    exportMessage && (
+      exportMessage.startsWith('No data') ||
+      exportMessage.startsWith('Please allow') ||
+      exportMessage.startsWith('Export failed')
+    )
+  );
 
   return (
     <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-xs border border-zinc-100/80">
@@ -626,13 +915,24 @@ export const DashboardActivityTable: React.FC = () => {
           </div>
 
           <button
+            id="export-pdf-btn"
             type="button"
-            onClick={handleExport}
+            onClick={handleExportPdf}
+            disabled={isExporting}
             title="Download current tab as PDF"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#F0F0EC] hover:bg-[#EAEAE5] text-zinc-700 rounded-full text-xs font-bold transition-all cursor-pointer"
+            className={clsx(
+              'flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all',
+              isExporting
+                ? 'bg-zinc-100 text-zinc-400 opacity-60 cursor-not-allowed'
+                : 'bg-[#F0F0EC] hover:bg-[#EAEAE5] text-zinc-700 cursor-pointer'
+            )}
           >
-            <Download className="w-3.5 h-3.5 text-zinc-600" />
-            <span>Export</span>
+            {isExporting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
+            ) : (
+              <Download className="w-3.5 h-3.5 text-zinc-600" />
+            )}
+            <span>{isExporting ? 'Generating...' : 'Export'}</span>
           </button>
 
           <button
@@ -1117,6 +1417,21 @@ export const DashboardActivityTable: React.FC = () => {
           )
         )}
       </div>
+
+      {/* Hidden container for PDF export rendering */}
+      <div
+        ref={exportContainerRef}
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          left: '-9999px',
+          top: 0,
+          width: '1400px',
+          pointerEvents: 'none',
+          background: '#FFFFFF',
+          paddingBottom: '80px',
+        }}
+      />
     </div>
   );
 };
