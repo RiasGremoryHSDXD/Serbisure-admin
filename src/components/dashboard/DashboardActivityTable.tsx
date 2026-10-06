@@ -186,7 +186,7 @@ function buildPdfReport(
       <th style="width: 25%;">Employer / Household</th>
       <th style="width: 25%;">Kasambahay / Worker</th>
       <th style="width: 17%;">Monthly Wage</th>
-      <th style="width: 14%;">Contract Type</th>
+      <th style="width: 14%; text-align: center;">Contract Type</th>
       <th style="width: 14%; text-align: center;">Compliance Status</th>
     `;
     tableRows = filteredBookings.map((b, idx) => {
@@ -223,7 +223,7 @@ function buildPdfReport(
               ? '<div style="font-size: 10px; font-weight: 700; color: #DC2626; margin-top: 3px;">⚠️ Below RA 10361 Min. Wage</div>' 
               : '<div style="font-size: 10px; font-weight: 700; color: #059669; margin-top: 3px;">✅ Wage Compliant</div>'}
           </td>
-          <td>
+          <td style="text-align: center;">
             <span class="contract-badge">${escapeHtml(contractDisplay)}</span>
           </td>
           <td style="text-align: center;">${getDeploymentStatusPill(rawStatus)}</td>
@@ -238,10 +238,10 @@ function buildPdfReport(
     tableHeaders = `
       <th style="width: 5%; text-align: center;">#</th>
       <th style="width: 24%;">Applicant Name</th>
-      <th style="width: 12%;">Account Role</th>
+      <th style="width: 12%; text-align: center;">Account Role</th>
       <th style="width: 22%;">Document Type</th>
       <th style="width: 15%;">Assigned Barangay</th>
-      <th style="width: 11%;">Date Submitted</th>
+      <th style="width: 11%; text-align: center;">Date Submitted</th>
       <th style="width: 11%; text-align: center;">Review Status</th>
     `;
     tableRows = filteredVerifications.map((v, idx) => {
@@ -260,7 +260,7 @@ function buildPdfReport(
             <div class="name-bold">${escapeHtml(applicantName)}</div>
             <div class="sub-text">${escapeHtml(applicantSub)}</div>
           </td>
-          <td>
+          <td style="text-align: center;">
             <span class="role-badge ${v.role === 'KASAMBAHAY' ? 'role-kasambahay' : 'role-homeowner'}">
               ${escapeHtml(roleDisplay)}
             </span>
@@ -271,7 +271,7 @@ function buildPdfReport(
           <td>
             <div style="font-weight: 600; color: #334155;">${escapeHtml(brgyDisplay)}</div>
           </td>
-          <td style="color: #64748B; font-weight: 500;">${escapeHtml(dateDisplay)}</td>
+          <td style="text-align: center; color: #64748B; font-weight: 500;">${escapeHtml(dateDisplay)}</td>
           <td style="text-align: center;">${getVerificationStatusPill(rawStatus)}</td>
         </tr>
       `;
@@ -337,21 +337,22 @@ function buildPdfReport(
     <style>
       .report-wrapper * { box-sizing: border-box; }
       .brand-badge {
-        display: inline-block;
+        display: inline-table;
+        border-collapse: separate;
+        border-spacing: 0;
         background: #F1F5F9;
         border: 1px solid #CBD5E1;
-        padding: 5px 14px;
         border-radius: 999px;
         margin-bottom: 12px;
+        vertical-align: middle;
       }
       .badge-dot {
-        display: inline-block;
+        display: block;
         width: 7px;
         height: 7px;
         border-radius: 50%;
         background: #059669;
-        vertical-align: middle;
-        margin-right: 6px;
+        margin: 0 auto;
       }
       .badge-text {
         font-size: 11px;
@@ -359,6 +360,7 @@ function buildPdfReport(
         color: #1E293B;
         letter-spacing: 0.6px;
         text-transform: uppercase;
+        line-height: 1;
         vertical-align: middle;
       }
       .report-title {
@@ -475,6 +477,9 @@ function buildPdfReport(
         font-weight: 700;
         letter-spacing: 0.2px;
         white-space: nowrap;
+        text-align: center;
+        line-height: 1.2;
+        vertical-align: middle;
       }
       .contract-badge {
         display: inline-block;
@@ -486,6 +491,9 @@ function buildPdfReport(
         padding: 3px 10px;
         border-radius: 6px;
         white-space: nowrap;
+        text-align: center;
+        line-height: 1.2;
+        vertical-align: middle;
       }
       .role-badge {
         display: inline-block;
@@ -494,6 +502,9 @@ function buildPdfReport(
         padding: 3px 10px;
         border-radius: 6px;
         white-space: nowrap;
+        text-align: center;
+        line-height: 1.2;
+        vertical-align: middle;
       }
       .role-kasambahay {
         background: #EFF6FF;
@@ -524,10 +535,16 @@ function buildPdfReport(
     <table style="width: 100%; border-collapse: collapse; border: none; background: transparent; margin-bottom: 4px;">
       <tr>
         <td style="border: none; padding: 0; vertical-align: top;">
-          <div class="brand-badge">
-            <span class="badge-dot"></span>
-            <span class="badge-text">Republic of the Philippines &bull; City of Cagayan de Oro &bull; LGU Administration</span>
-          </div>
+          <table class="brand-badge">
+            <tr>
+              <td style="border: none; padding: 4px 6px 4px 14px; vertical-align: middle; line-height: 0; font-size: 0;">
+                <span class="badge-dot"></span>
+              </td>
+              <td style="border: none; padding: 4px 14px 4px 0; vertical-align: middle; line-height: 1; white-space: nowrap;">
+                <span class="badge-text">Republic of the Philippines &bull; City of Cagayan de Oro &bull; LGU Administration</span>
+              </td>
+            </tr>
+          </table>
           <h1 class="report-title">${escapeHtml(title)}</h1>
           <p class="report-subtitle">${escapeHtml(subtitle)}</p>
         </td>
