@@ -337,31 +337,19 @@ function buildPdfReport(
     <style>
       .report-wrapper * { box-sizing: border-box; }
       .brand-badge {
-        display: inline-table;
-        border-collapse: separate;
-        border-spacing: 0;
+        display: inline-block;
         background: #F1F5F9;
         border: 1px solid #CBD5E1;
+        padding: 5px 16px 5px 12px;
         border-radius: 999px;
         margin-bottom: 12px;
-        vertical-align: middle;
-      }
-      .badge-dot {
-        display: block;
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: #059669;
-        margin: 0 auto;
-      }
-      .badge-text {
         font-size: 11px;
         font-weight: 700;
         color: #1E293B;
         letter-spacing: 0.6px;
         text-transform: uppercase;
-        line-height: 1;
-        vertical-align: middle;
+        line-height: 1.5;
+        white-space: nowrap;
       }
       .report-title {
         font-size: 26px;
@@ -535,16 +523,9 @@ function buildPdfReport(
     <table style="width: 100%; border-collapse: collapse; border: none; background: transparent; margin-bottom: 4px;">
       <tr>
         <td style="border: none; padding: 0; vertical-align: top;">
-          <table class="brand-badge">
-            <tr>
-              <td style="border: none; padding: 4px 6px 4px 14px; vertical-align: middle; line-height: 0; font-size: 0;">
-                <span class="badge-dot"></span>
-              </td>
-              <td style="border: none; padding: 4px 14px 4px 0; vertical-align: middle; line-height: 1; white-space: nowrap;">
-                <span class="badge-text">Republic of the Philippines &bull; City of Cagayan de Oro &bull; LGU Administration</span>
-              </td>
-            </tr>
-          </table>
+          <span class="brand-badge">
+            <span style="color: #059669; font-size: 13px; line-height: 1; margin-right: 6px;">&#9679;</span>Republic of the Philippines &bull; City of Cagayan de Oro &bull; LGU Administration
+          </span>
           <h1 class="report-title">${escapeHtml(title)}</h1>
           <p class="report-subtitle">${escapeHtml(subtitle)}</p>
         </td>
@@ -597,8 +578,7 @@ function buildPdfReport(
       <tr>
         <td style="text-align: left;">
           <div style="font-size: 11px; font-weight: 700; color: #475569;">
-            <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #10B981; margin-right: 6px; vertical-align: middle;"></span>
-            Official LGU Compliance Record &bull; Generated via SerbiSure Management Portal
+            <span style="color: #10B981; font-size: 13px; margin-right: 5px;">&#9679;</span>Official LGU Compliance Record &bull; Generated via SerbiSure Management Portal
           </div>
           <div style="font-size: 10px; color: #94A3B8; margin-top: 4px; line-height: 1.4;">
             Confidential Document &bull; Protected under Republic Act No. 10361 (Batas Kasambahay) and Republic Act No. 10173 (Data Privacy Act of 2012).
