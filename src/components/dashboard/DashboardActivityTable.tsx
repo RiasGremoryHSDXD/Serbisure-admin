@@ -95,44 +95,52 @@ function escapeHtml(val: unknown): string {
 
 function getDeploymentStatusPill(status: string): string {
   const s = (status || '').toUpperCase();
-  let style = 'background:#f4f4f5;color:#3f3f46;';
+  let style = 'background:#F1F5F9; color:#475569; border:1px solid #CBD5E1;';
+  let label = status || 'Pending';
   if (s.includes('COMPLIANT')) {
-    style = 'background:#d1fae5;color:#065f46;';
+    style = 'background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0;';
+    label = 'RA 10361 Compliant';
   } else if (s.includes('BELOW_MINIMUM_WAGE') || s.includes('BELOW')) {
-    style = 'background:#ffe4e6;color:#9f1239;';
+    style = 'background:#FEF2F2; color:#991B1B; border:1px solid #FECACA;';
+    label = 'Below Min. Wage';
   } else if (s.includes('FLAGGED') || s.includes('THROTTLED')) {
-    style = 'background:#fef3c7;color:#92400e;';
+    style = 'background:#FFFBEB; color:#92400E; border:1px solid #FDE68A;';
+    label = 'Flagged / Review';
   } else if (s.includes('ACTIVE')) {
-    style = 'background:#dbeafe;color:#1e40af;';
+    style = 'background:#EFF6FF; color:#1E40AF; border:1px solid #BFDBFE;';
+    label = 'Active Deployment';
+  } else if (s.includes('PENDING')) {
+    style = 'background:#FFFBEB; color:#92400E; border:1px solid #FDE68A;';
+    label = 'Pending Review';
   }
-  return `<span class="pill" style="${style}">${escapeHtml(status || 'Pending')}</span>`;
+  return `<span class="pill" style="${style}">${escapeHtml(label)}</span>`;
 }
 
 function getVerificationStatusPill(status: string): string {
   const s = (status || '').toUpperCase();
   if (s.includes('VERIFIED') || s.includes('APPROVED')) {
-    return `<span class="pill" style="background:#d1fae5;color:#065f46;">Verified</span>`;
+    return `<span class="pill" style="background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0;">Verified</span>`;
   }
   if (s.includes('REJECTED')) {
-    return `<span class="pill" style="background:#ffe4e6;color:#9f1239;">Rejected</span>`;
+    return `<span class="pill" style="background:#FEF2F2; color:#991B1B; border:1px solid #FECACA;">Rejected</span>`;
   }
   if (s.includes('PENDING') || s.includes('REVIEW')) {
-    return `<span class="pill" style="background:#fef3c7;color:#92400e;">In Review</span>`;
+    return `<span class="pill" style="background:#FFFBEB; color:#92400E; border:1px solid #FDE68A;">In Review</span>`;
   }
-  return `<span class="pill" style="background:#f4f4f5;color:#3f3f46;">${escapeHtml(status || 'Pending')}</span>`;
+  return `<span class="pill" style="background:#F1F5F9; color:#475569; border:1px solid #CBD5E1;">${escapeHtml(status || 'Pending')}</span>`;
 }
 
 function getAuditActionPill(action: string): string {
   const a = (action || '').toUpperCase();
-  let style = 'background:#f4f4f5;color:#3f3f46;';
+  let style = 'background:#F1F5F9; color:#475569; border:1px solid #CBD5E1;';
   if (a.includes('APPROV') || a.includes('VERIF')) {
-    style = 'background:#d1fae5;color:#065f46;';
+    style = 'background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0;';
   } else if (a.includes('REJECT') || a.includes('DELET')) {
-    style = 'background:#ffe4e6;color:#9f1239;';
+    style = 'background:#FEF2F2; color:#991B1B; border:1px solid #FECACA;';
   } else if (a.includes('RESET')) {
-    style = 'background:#fef3c7;color:#92400e;';
+    style = 'background:#FFFBEB; color:#92400E; border:1px solid #FDE68A;';
   } else if (a.includes('UPLOAD')) {
-    style = 'background:#e0f2fe;color:#0369a1;';
+    style = 'background:#EFF6FF; color:#1E40AF; border:1px solid #BFDBFE;';
   }
   return `<span class="pill" style="${style}">${escapeHtml(action || 'ACTION')}</span>`;
 }
@@ -145,190 +153,426 @@ function buildPdfReport(
   meta: { barangay: string; generatedAt: string; searchTerm: string }
 ): string {
   let title = '';
+  let subtitle = '';
   let count = 0;
   let tableHeaders = '';
   let tableRows = '';
+  let colSpan = 6;
 
   if (tab === 'DEPLOYMENTS') {
     title = 'Placement & Bookings Compliance Report';
+    subtitle = 'Republic Act No. 10361 (Batas Kasambahay) Statutory Wage Baseline & Employment Placement Register';
     count = filteredBookings.length;
+    colSpan = 6;
     tableHeaders = `
-      <th style="width:40px;">#</th>
-      <th>Employer</th>
-      <th>Kasambahay / Worker</th>
-      <th>Monthly Wage</th>
-      <th>Contract Type</th>
-      <th>Status</th>
+      <th style="width: 50px; text-align: center;">#</th>
+      <th style="width: 250px;">Employer / Household</th>
+      <th style="width: 250px;">Kasambahay / Worker</th>
+      <th style="width: 170px;">Monthly Wage</th>
+      <th style="width: 200px;">Contract Type</th>
+      <th style="width: 170px; text-align: center;">Compliance Status</th>
     `;
     tableRows = filteredBookings.map((b, idx) => {
-      const employerName = b.homeownerName || 'Unassigned';
-      const employerSub = b.barangay ? `Barangay ${b.barangay}` : '';
-      const workerName = b.workerName || 'Unassigned';
-      const workerSub = b.serviceCategory || '';
-      const wageDisplay = b.offeredWage != null ? `₱${Number(b.offeredWage).toLocaleString()} / mo` : '—';
-      const contract = b.contractType || '—';
+      const employerName = b.homeownerName || 'Unassigned Employer';
+      const employerSub = b.barangay ? `Brgy. ${b.barangay}` : 'Barangay Not Specified';
+      const workerName = b.workerName || 'Unassigned Worker';
+      const workerSub = b.serviceCategory || 'Domestic Worker';
+      const wageDisplay = b.offeredWage != null ? `₱${Number(b.offeredWage).toLocaleString()}` : '—';
+      const isBelowWage = Boolean(b.isBelowMinimumWage);
+      const contract = b.contractType || 'Standard Agreement';
       const contractDisplay = contract.includes('Formal')
         ? 'Formal (Long-Term)'
         : contract.includes('Short')
-        ? 'Short-Term'
+        ? 'Short-Term On-Demand'
         : contract;
       const rawStatus = b.bookingStatus || b.status || 'Pending';
 
       return `
         <tr>
-          <td style="color:#71717a;font-weight:700;">${idx + 1}</td>
+          <td style="text-align: center; color: #94A3B8; font-weight: 700;">${idx + 1}</td>
           <td>
-            <span class="name-bold">${escapeHtml(employerName)}</span>
-            ${employerSub ? `<span class="sub-text">${escapeHtml(employerSub)}</span>` : ''}
+            <div class="name-bold">${escapeHtml(employerName)}</div>
+            <div class="sub-text">${escapeHtml(employerSub)}</div>
           </td>
           <td>
-            <span class="name-bold">${escapeHtml(workerName)}</span>
-            ${workerSub ? `<span class="sub-text">${escapeHtml(workerSub)}</span>` : ''}
+            <div class="name-bold">${escapeHtml(workerName)}</div>
+            <div class="sub-text">${escapeHtml(workerSub)}</div>
           </td>
-          <td style="font-weight:700;color:#0D0D11;">${escapeHtml(wageDisplay)}</td>
-          <td>${escapeHtml(contractDisplay)}</td>
-          <td>${getDeploymentStatusPill(rawStatus)}</td>
+          <td>
+            <div style="font-weight: 800; font-size: 13px; color: #0F172A;">
+              ${escapeHtml(wageDisplay)} <span style="font-weight: 500; font-size: 11px; color: #64748B;">/ mo</span>
+            </div>
+            ${isBelowWage ? '<div style="font-size: 10px; font-weight: 700; color: #DC2626; margin-top: 3px;">⚠️ Below RA 10361 Min. Wage</div>' : ''}
+          </td>
+          <td>
+            <span class="contract-badge">${escapeHtml(contractDisplay)}</span>
+          </td>
+          <td style="text-align: center;">${getDeploymentStatusPill(rawStatus)}</td>
         </tr>
       `;
     }).join('');
   } else if (tab === 'VERIFICATIONS') {
     title = 'Clearance & Document Verification Report';
+    subtitle = 'Official Kasambahay & Homeowner Regulatory Identity Screening & Document Queue';
     count = filteredVerifications.length;
+    colSpan = 7;
     tableHeaders = `
-      <th style="width:40px;">#</th>
-      <th>Applicant</th>
-      <th>Role</th>
-      <th>Document Type</th>
-      <th>Barangay</th>
-      <th>Submitted Date</th>
-      <th>Status</th>
+      <th style="width: 50px; text-align: center;">#</th>
+      <th style="width: 250px;">Applicant Name</th>
+      <th style="width: 140px;">Role</th>
+      <th style="width: 220px;">Document Type</th>
+      <th style="width: 180px;">Assigned Barangay</th>
+      <th style="width: 160px;">Date Submitted</th>
+      <th style="width: 140px; text-align: center;">Review Status</th>
     `;
     tableRows = filteredVerifications.map((v, idx) => {
       const applicantName = v.name || '—';
-      const applicantSub = v.documentNumber ? `Doc #: ${v.documentNumber}` : '';
+      const applicantSub = v.documentNumber ? `ID/Doc #: ${v.documentNumber}` : 'No Document ID';
       const roleDisplay = v.role === 'KASAMBAHAY' ? 'Kasambahay' : v.role === 'HOMEOWNER' ? 'Homeowner' : (v.role || '—');
       const docDisplay = formatDocType(v.documentType);
-      const brgyDisplay = v.barangay || '—';
+      const brgyDisplay = v.barangay ? `Brgy. ${v.barangay}` : '—';
       const dateDisplay = v.submittedDate || '—';
       const rawStatus = v.status || 'Pending';
 
       return `
         <tr>
-          <td style="color:#71717a;font-weight:700;">${idx + 1}</td>
+          <td style="text-align: center; color: #94A3B8; font-weight: 700;">${idx + 1}</td>
           <td>
-            <span class="name-bold">${escapeHtml(applicantName)}</span>
-            ${applicantSub ? `<span class="sub-text">${escapeHtml(applicantSub)}</span>` : ''}
+            <div class="name-bold">${escapeHtml(applicantName)}</div>
+            <div class="sub-text">${escapeHtml(applicantSub)}</div>
           </td>
-          <td>${escapeHtml(roleDisplay)}</td>
-          <td>${escapeHtml(docDisplay)}</td>
-          <td>${escapeHtml(brgyDisplay)}</td>
-          <td>${escapeHtml(dateDisplay)}</td>
-          <td>${getVerificationStatusPill(rawStatus)}</td>
+          <td>
+            <span class="role-badge ${v.role === 'KASAMBAHAY' ? 'role-kasambahay' : 'role-homeowner'}">
+              ${escapeHtml(roleDisplay)}
+            </span>
+          </td>
+          <td>
+            <div style="font-weight: 600; color: #1E293B;">${escapeHtml(docDisplay)}</div>
+          </td>
+          <td>
+            <div style="font-weight: 600; color: #334155;">${escapeHtml(brgyDisplay)}</div>
+          </td>
+          <td style="color: #64748B; font-weight: 500;">${escapeHtml(dateDisplay)}</td>
+          <td style="text-align: center;">${getVerificationStatusPill(rawStatus)}</td>
         </tr>
       `;
     }).join('');
   } else if (tab === 'AUDIT_TRAIL') {
-    title = 'System Audit Trail Report';
+    title = 'System Audit Trail & Administrative Activity Log';
+    subtitle = 'Immutable Record of Official Verifications, Document Actions, and Status Changes';
     count = filteredAuditLogs.length;
+    colSpan = 7;
     tableHeaders = `
-      <th style="width:40px;">#</th>
-      <th>Official / Actor</th>
-      <th>Action</th>
-      <th>Resident & Document</th>
-      <th>Status Change</th>
-      <th>Reason</th>
-      <th>Timestamp</th>
+      <th style="width: 50px; text-align: center;">#</th>
+      <th style="width: 220px;">Official / Actor</th>
+      <th style="width: 140px; text-align: center;">Action</th>
+      <th style="width: 240px;">Target Resident & Document</th>
+      <th style="width: 180px;">Status Transition</th>
+      <th style="width: 220px;">Reason / Notes</th>
+      <th style="width: 170px;">Timestamp</th>
     `;
     tableRows = filteredAuditLogs.map((a, idx) => {
-      const actorName = a.actor_name || 'System';
-      const actorSub = [a.actor_role, a.actor_barangay].filter(Boolean).join(' • ') || 'System Admin';
+      const actorName = a.actor_name || 'System Administrator';
+      const actorSub = [a.actor_role, a.actor_barangay ? `Brgy. ${a.actor_barangay}` : ''].filter(Boolean).join(' • ') || 'LGU System';
       const actionPill = getAuditActionPill(a.action);
       const targetName = a.target_name || '—';
-      const targetSub = [formatDocType(a.document_type), a.target_barangay].filter(Boolean).join(' • ') || '—';
+      const targetSub = [formatDocType(a.document_type), a.target_barangay ? `Brgy. ${a.target_barangay}` : ''].filter(Boolean).join(' • ') || '—';
       const statusChange = (a.previous_status || a.new_status)
         ? `${a.previous_status || 'Pending'} → ${a.new_status || 'Updated'}`
         : '—';
-      const rawReason = a.reason || '—';
-      const reasonDisplay = rawReason.length > 60 ? rawReason.slice(0, 60) + '...' : rawReason;
+      const rawReason = a.reason || 'Routine administrative action';
+      const reasonDisplay = rawReason.length > 75 ? rawReason.slice(0, 75) + '...' : rawReason;
       const timeDisplay = formatAuditDate(a.created_at);
-      const logSub = a.log_id ? `Log #${String(a.log_id).slice(-6)}` : '';
+      const logSub = a.log_id ? `Log #${String(a.log_id).slice(-8)}` : '';
 
       return `
         <tr>
-          <td style="color:#71717a;font-weight:700;">${idx + 1}</td>
+          <td style="text-align: center; color: #94A3B8; font-weight: 700;">${idx + 1}</td>
           <td>
-            <span class="name-bold">${escapeHtml(actorName)}</span>
-            <span class="sub-text">${escapeHtml(actorSub)}</span>
+            <div class="name-bold">${escapeHtml(actorName)}</div>
+            <div class="sub-text">${escapeHtml(actorSub)}</div>
           </td>
-          <td>${actionPill}</td>
+          <td style="text-align: center;">${actionPill}</td>
           <td>
-            <span class="name-bold">${escapeHtml(targetName)}</span>
-            <span class="sub-text">${escapeHtml(targetSub)}</span>
+            <div class="name-bold">${escapeHtml(targetName)}</div>
+            <div class="sub-text">${escapeHtml(targetSub)}</div>
           </td>
-          <td style="font-weight:600;color:#27272a;">${escapeHtml(statusChange)}</td>
-          <td style="color:#52525b;max-width:200px;">${escapeHtml(reasonDisplay)}</td>
           <td>
-            <span class="name-bold">${escapeHtml(timeDisplay)}</span>
-            ${logSub ? `<span class="sub-text">${escapeHtml(logSub)}</span>` : ''}
+            <div style="font-weight: 600; font-size: 11.5px; color: #1E293B;">${escapeHtml(statusChange)}</div>
+          </td>
+          <td>
+            <div style="color: #475569; font-size: 11px; line-height: 1.4;">${escapeHtml(reasonDisplay)}</div>
+          </td>
+          <td>
+            <div style="font-weight: 700; color: #1E293B;">${escapeHtml(timeDisplay)}</div>
+            ${logSub ? `<div class="sub-text">${escapeHtml(logSub)}</div>` : ''}
           </td>
         </tr>
       `;
     }).join('');
   }
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeHtml(title)}</title>
-  <style>
-    @page { size: landscape; margin: 12mm; }
-    body { font-family: system-ui,-apple-system,sans-serif; background:#F6F5F2; margin:0; padding:20px; color:#0D0D11; }
-    .header { margin-bottom:24px; border-bottom:2px solid #FFB380; padding-bottom:16px; }
-    .sys-name { font-size:11px; font-weight:700; color:#FFB380; text-transform:uppercase; letter-spacing:2px; }
-    .report-title { font-size:24px; font-weight:900; color:#0D0D11; margin:4px 0; }
-    .meta { font-size:12px; color:#52525b; margin:2px 0; }
-    .meta-filter { color:#d97706; font-style:italic; }
-    table { width:100%; border-collapse:collapse; font-size:12px; background:white; border-radius:8px; overflow:hidden; }
-    thead tr { background:#0D0D11; color:white; }
-    th { padding:10px 12px; text-align:left; font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap; }
-    td { padding:10px 12px; border-bottom:1px solid #f4f4f5; vertical-align:top; }
-    tr:last-child td { border-bottom:none; }
-    tr:nth-child(even) { background:#fafafa; }
-    .pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; }
-    .name-bold { font-weight:700; display:block; }
-    .sub-text { font-size:10px; color:#71717a; display:block; margin-top:2px; }
-    .footer { margin-top:24px; padding-top:12px; border-top:1px solid #e4e4e7; display:flex; justify-content:space-between; font-size:10px; color:#71717a; }
-    @media print { body { background:white; } }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="sys-name">SerbiSure LGU Dashboard</div>
-    <div class="report-title">${escapeHtml(title)}</div>
-    <div class="meta">Barangay: <strong>${escapeHtml(meta.barangay)}</strong></div>
-    <div class="meta">Generated: <strong>${escapeHtml(meta.generatedAt)}</strong></div>
-    <div class="meta">Records exported: <strong>${count}</strong></div>
-    ${meta.searchTerm ? `<div class="meta meta-filter">Search filter: &laquo;${escapeHtml(meta.searchTerm)}&raquo;</div>` : ''}
-  </div>
+  const classification = meta.searchTerm 
+    ? `Filtered by "${meta.searchTerm}"` 
+    : 'Complete Active Scope';
 
-  <table>
-    <thead>
+  return `
+  <div class="report-wrapper" style="box-sizing: border-box; width: 1400px; background: #FFFFFF; padding: 48px 56px 72px 56px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #0F172A; line-height: 1.5; overflow: hidden;">
+    <style>
+      .report-wrapper * { box-sizing: border-box; }
+      .brand-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #475569;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        margin-bottom: 12px;
+      }
+      .badge-dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #10B981;
+      }
+      .report-title {
+        font-size: 26px;
+        font-weight: 900;
+        color: #0F172A;
+        letter-spacing: -0.5px;
+        margin: 0 0 6px 0;
+      }
+      .report-subtitle {
+        font-size: 12.5px;
+        font-weight: 500;
+        color: #64748B;
+        margin: 0;
+      }
+      .logo-title {
+        font-size: 24px;
+        font-weight: 900;
+        letter-spacing: -0.5px;
+        color: #0F172A;
+      }
+      .logo-orange {
+        color: #FF7A00;
+      }
+      .logo-sub {
+        font-size: 10px;
+        font-weight: 700;
+        color: #94A3B8;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        margin-top: 2px;
+      }
+      .meta-grid {
+        width: 100%;
+        margin-top: 24px;
+        margin-bottom: 28px;
+        border-collapse: separate;
+        border-spacing: 12px 0;
+      }
+      .meta-card {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 10px;
+        padding: 12px 16px;
+        vertical-align: top;
+      }
+      .meta-card-label {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.7px;
+        color: #94A3B8;
+        margin-bottom: 4px;
+      }
+      .meta-card-val {
+        font-size: 13px;
+        font-weight: 800;
+        color: #0F172A;
+      }
+      table.data-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      table.data-table thead tr {
+        background: #0F172A;
+      }
+      table.data-table th {
+        padding: 14px 16px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: #FFFFFF;
+        border-bottom: 3px solid #FF7A00;
+        text-align: left;
+      }
+      table.data-table td {
+        padding: 14px 16px;
+        font-size: 12px;
+        border-bottom: 1px solid #F1F5F9;
+        vertical-align: middle;
+      }
+      table.data-table tbody tr:nth-child(even) td {
+        background: #FAFAFA;
+      }
+      table.data-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .name-bold {
+        font-weight: 700;
+        font-size: 12.5px;
+        color: #0F172A;
+      }
+      .sub-text {
+        font-size: 10.5px;
+        font-weight: 500;
+        color: #64748B;
+        margin-top: 3px;
+      }
+      .pill {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+      .contract-badge {
+        display: inline-block;
+        background: #F1F5F9;
+        color: #334155;
+        border: 1px solid #CBD5E1;
+        font-weight: 600;
+        font-size: 11px;
+        padding: 3px 10px;
+        border-radius: 6px;
+      }
+      .role-badge {
+        display: inline-block;
+        font-weight: 700;
+        font-size: 11px;
+        padding: 3px 10px;
+        border-radius: 6px;
+      }
+      .role-kasambahay {
+        background: #EFF6FF;
+        color: #1E40AF;
+        border: 1px solid #BFDBFE;
+      }
+      .role-homeowner {
+        background: #FAF5FF;
+        color: #6B21A8;
+        border: 1px solid #E9D5FF;
+      }
+      .footer-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 36px;
+        padding-top: 18px;
+        border-top: 1.5px solid #E2E8F0;
+        background: transparent;
+      }
+      .footer-table td {
+        border: none;
+        padding: 0;
+        vertical-align: middle;
+      }
+    </style>
+
+    <!-- Top Brand & Header Table -->
+    <table style="width: 100%; border-collapse: collapse; border: none; background: transparent; margin-bottom: 4px;">
       <tr>
-        ${tableHeaders}
+        <td style="border: none; padding: 0; vertical-align: top;">
+          <div class="brand-badge">
+            <span class="badge-dot"></span>
+            <span>Republic of the Philippines &bull; City of Cagayan de Oro &bull; LGU Administration</span>
+          </div>
+          <h1 class="report-title">${escapeHtml(title)}</h1>
+          <p class="report-subtitle">${escapeHtml(subtitle)}</p>
+        </td>
+        <td style="border: none; padding: 0; vertical-align: top; text-align: right; width: 260px;">
+          <div class="logo-title">Serbi<span class="logo-orange">Sure</span>.</div>
+          <div class="logo-sub">City Administration Portal</div>
+          <div style="font-size: 11px; font-weight: 600; color: #475569; margin-top: 6px;">
+            Official Registry Copy
+          </div>
+        </td>
       </tr>
-    </thead>
-    <tbody>
-      ${tableRows || '<tr><td colspan="7" style="text-align:center;padding:24px;color:#71717a;">No records found</td></tr>'}
-    </tbody>
-  </table>
+    </table>
 
-  <div class="footer">
-    <span>This report is auto-generated by SerbiSure and is for official LGU use only.</span>
-    <span>Page 1 of 1</span>
+    <!-- 4-Card Meta / KPI Grid -->
+    <table class="meta-grid">
+      <tr>
+        <td class="meta-card" style="width: 25%;">
+          <div class="meta-card-label">Assigned Jurisdiction</div>
+          <div class="meta-card-val">${escapeHtml(meta.barangay)}</div>
+        </td>
+        <td class="meta-card" style="width: 28%;">
+          <div class="meta-card-label">Date &amp; Time Generated</div>
+          <div class="meta-card-val">${escapeHtml(meta.generatedAt)}</div>
+        </td>
+        <td class="meta-card" style="width: 22%;">
+          <div class="meta-card-label">Total Records Exported</div>
+          <div class="meta-card-val" style="color: #EA580C;">${count} Record${count === 1 ? '' : 's'}</div>
+        </td>
+        <td class="meta-card" style="width: 25%;">
+          <div class="meta-card-label">Report Classification</div>
+          <div class="meta-card-val">${escapeHtml(classification)}</div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Primary Data Table -->
+    <table class="data-table">
+      <thead>
+        <tr>
+          ${tableHeaders}
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows || `<tr><td colspan="${colSpan}" style="text-align:center; padding:36px; color:#94A3B8; font-weight:600; font-size:13px;">No data records found for current filters</td></tr>`}
+      </tbody>
+    </table>
+
+    <!-- Official Document Footer Table (Bulletproof layout for html2canvas) -->
+    <table class="footer-table">
+      <tr>
+        <td style="text-align: left;">
+          <div style="font-size: 11px; font-weight: 700; color: #475569;">
+            <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #10B981; margin-right: 6px; vertical-align: middle;"></span>
+            Official LGU Compliance Record &bull; Generated via SerbiSure Management Portal
+          </div>
+          <div style="font-size: 10px; color: #94A3B8; margin-top: 4px; line-height: 1.4;">
+            Confidential Document &bull; Protected under Republic Act No. 10361 (Batas Kasambahay) and Republic Act No. 10173 (Data Privacy Act of 2012).
+          </div>
+        </td>
+        <td style="text-align: right; width: 320px;">
+          <div style="font-size: 11px; font-weight: 700; color: #475569;">
+            City Government of Cagayan de Oro
+          </div>
+          <div style="font-size: 10px; color: #94A3B8; margin-top: 4px;">
+            Official Administrative Export &bull; Verified Record
+          </div>
+        </td>
+      </tr>
+    </table>
   </div>
-</body>
-</html>`;
+  `;
 }
 
 export const DashboardActivityTable: React.FC = () => {
@@ -574,6 +818,10 @@ export const DashboardActivityTable: React.FC = () => {
         scale: 2,
         useCORS: true,
         logging: false,
+        backgroundColor: '#FFFFFF',
+        windowWidth: 1400,
+        scrollX: 0,
+        scrollY: 0,
       });
       const pdf = new jsPDF({
         orientation: 'landscape',
@@ -1178,7 +1426,8 @@ export const DashboardActivityTable: React.FC = () => {
           top: 0,
           width: '1400px',
           pointerEvents: 'none',
-          background: '#F6F5F2',
+          background: '#FFFFFF',
+          paddingBottom: '80px',
         }}
       />
     </div>
