@@ -303,7 +303,7 @@ function buildPdfReport(
       const statusChange = formatStatusTransition(a.previous_status, a.new_status);
       const reasonDisplay = formatReason(a.reason);
       const timeDisplay = formatAuditDate(a.created_at);
-      const logSub = a.log_id ? `Ref: #${String(a.log_id).slice(-8).toUpperCase()}` : '';
+      const logSub = a.log_id ? `ID #${String(a.log_id).slice(-6)}` : '';
 
       return `
         <tr>
@@ -325,7 +325,7 @@ function buildPdfReport(
           </td>
           <td>
             <div style="font-weight: 700; color: #1E293B;">${escapeHtml(timeDisplay)}</div>
-            ${logSub ? `<div class="sub-text">${escapeHtml(logSub)}</div>` : ''}
+            ${logSub ? `<div class="sub-text" style="font-family: monospace; font-size: 10px; color: #94A3B8;">${escapeHtml(logSub)}</div>` : ''}
           </td>
         </tr>
       `;
