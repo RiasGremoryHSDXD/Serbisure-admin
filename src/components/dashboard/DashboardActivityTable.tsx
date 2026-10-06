@@ -146,13 +146,9 @@ function getAuditActionPill(action: string): string {
 }
 
 function formatReason(raw?: string | null): string {
-  if (!raw) return 'Routine administrative action';
+  if (!raw || !raw.trim()) return '—';
   const trimmed = raw.trim();
-  const lower = trimmed.toLowerCase();
-  if (['0', 'q', 'qw', 'kk', 'k', 'test', 'no', 'none', '-', '.', 'n/a'].includes(lower)) {
-    return 'Routine administrative action';
-  }
-  return trimmed.length > 75 ? trimmed.slice(0, 75) + '...' : trimmed;
+  return trimmed.length > 120 ? trimmed.slice(0, 120) + '...' : trimmed;
 }
 
 function formatStatusTransition(prev?: string | null, next?: string | null): string {
@@ -321,7 +317,7 @@ function buildPdfReport(
             <div style="font-size: 11.5px;">${statusChange}</div>
           </td>
           <td>
-            <div style="color: #475569; font-size: 11px; line-height: 1.4;">${escapeHtml(reasonDisplay)}</div>
+            <div style="color: ${reasonDisplay === '—' ? '#94A3B8' : '#334155'}; font-size: 11px; line-height: 1.4; word-break: break-word;">${escapeHtml(reasonDisplay)}</div>
           </td>
           <td>
             <div style="font-weight: 700; color: #1E293B;">${escapeHtml(timeDisplay)}</div>
