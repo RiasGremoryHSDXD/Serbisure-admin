@@ -340,7 +340,7 @@ function buildPdfReport(
         display: inline-block;
         background: #F1F5F9;
         border: 1px solid #CBD5E1;
-        padding: 5px 16px 5px 12px;
+        padding: 5px 14px;
         border-radius: 999px;
         margin-bottom: 12px;
         font-size: 11px;
@@ -348,7 +348,7 @@ function buildPdfReport(
         color: #1E293B;
         letter-spacing: 0.6px;
         text-transform: uppercase;
-        line-height: 1.5;
+        line-height: 1.4;
         white-space: nowrap;
       }
       .report-title {
@@ -523,9 +523,7 @@ function buildPdfReport(
     <table style="width: 100%; border-collapse: collapse; border: none; background: transparent; margin-bottom: 4px;">
       <tr>
         <td style="border: none; padding: 0; vertical-align: top;">
-          <span class="brand-badge">
-            <span style="color: #059669; font-size: 13px; line-height: 1; margin-right: 6px;">&#9679;</span>Republic of the Philippines &bull; City of Cagayan de Oro &bull; LGU Administration
-          </span>
+          <span class="brand-badge">Republic of the Philippines &bull; City of Cagayan de Oro &bull; LGU Administration</span>
           <h1 class="report-title">${escapeHtml(title)}</h1>
           <p class="report-subtitle">${escapeHtml(subtitle)}</p>
         </td>
@@ -578,7 +576,7 @@ function buildPdfReport(
       <tr>
         <td style="text-align: left;">
           <div style="font-size: 11px; font-weight: 700; color: #475569;">
-            <span style="color: #10B981; font-size: 13px; margin-right: 5px;">&#9679;</span>Official LGU Compliance Record &bull; Generated via SerbiSure Management Portal
+            Official LGU Compliance Record &bull; Generated via SerbiSure Management Portal
           </div>
           <div style="font-size: 10px; color: #94A3B8; margin-top: 4px; line-height: 1.4;">
             Confidential Document &bull; Protected under Republic Act No. 10361 (Batas Kasambahay) and Republic Act No. 10173 (Data Privacy Act of 2012).
