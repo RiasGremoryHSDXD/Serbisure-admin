@@ -1,4 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import clsx from 'clsx';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { 
   Search, 
   Calendar, 
@@ -336,6 +339,8 @@ export const DashboardActivityTable: React.FC = () => {
   const [verificationsPage, setVerificationsPage] = useState(1);
   const [auditPage, setAuditPage] = useState(1);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const exportContainerRef = useRef<HTMLDivElement>(null);
 
   // Scope to assigned barangay if logged in as local LGU officer
   const scopedVerifications = useMemo(() => {
@@ -516,7 +521,7 @@ export const DashboardActivityTable: React.FC = () => {
     );
   };
 
-  const handleExport = () => {
+  const handleExportPdf = async () => {
     const isEmpty = 
       (activeTab === 'DEPLOYMENTS' && filteredBookings.length === 0) ||
       (activeTab === 'VERIFICATIONS' && filteredVerifications.length === 0) ||
@@ -527,6 +532,23 @@ export const DashboardActivityTable: React.FC = () => {
       setTimeout(() => setExportMessage(null), 3000);
       return;
     }
+
+    if (!exportContainerRef.current) {
+      setExportMessage('Export failed. Please try again.');
+      setTimeout(() => setExportMessage(null), 4000);
+      return;
+    }
+
+    setIsExporting(true);
+
+    const TAB_LABELS: Record<string, string> = {
+      DEPLOYMENTS: 'placements-bookings',
+      VERIFICATIONS: 'verifications',
+      AUDIT_TRAIL: 'audit-trail',
+    };
+    const tabLabel = TAB_LABELS[activeTab] ?? 'report';
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `serbisure-report-${tabLabel}-${dateStr}.pdf`;
 
     const barangay = selectedBarangay || 'All Barangays';
     const generatedAt = new Date().toLocaleString('en-US', {
@@ -546,22 +568,39 @@ export const DashboardActivityTable: React.FC = () => {
       { barangay, generatedAt, searchTerm }
     );
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      setExportMessage('Please allow pop-ups for this site to download the PDF.');
+    try {
+      exportContainerRef.current.innerHTML = htmlString;
+      const canvas = await html2canvas(exportContainerRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'px',
+        format: [canvas.width, canvas.height],
+      });
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(filename);
+      exportContainerRef.current.innerHTML = '';
+      setExportMessage('✓ Report downloaded successfully.');
+      setTimeout(() => setExportMessage(null), 3000);
+    } catch {
+      if (exportContainerRef.current) exportContainerRef.current.innerHTML = '';
+      setExportMessage('Export failed. Please try again.');
       setTimeout(() => setExportMessage(null), 4000);
-      return;
+    } finally {
+      setIsExporting(false);
     }
-    printWindow.document.write(htmlString);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-
-    setExportMessage('PDF report opened — use "Save as PDF" in the print dialog.');
-    setTimeout(() => setExportMessage(null), 4000);
   };
 
-  const isExportWarning = Boolean(exportMessage && (exportMessage.startsWith('No data') || exportMessage.startsWith('Please allow')));
+  const isExportWarning = Boolean(
+    exportMessage && (
+      exportMessage.startsWith('No data') ||
+      exportMessage.startsWith('Please allow') ||
+      exportMessage.startsWith('Export failed')
+    )
+  );
 
   return (
     <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-xs border border-zinc-100/80">
@@ -626,13 +665,24 @@ export const DashboardActivityTable: React.FC = () => {
           </div>
 
           <button
+            id="export-pdf-btn"
             type="button"
-            onClick={handleExport}
+            onClick={handleExportPdf}
+            disabled={isExporting}
             title="Download current tab as PDF"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#F0F0EC] hover:bg-[#EAEAE5] text-zinc-700 rounded-full text-xs font-bold transition-all cursor-pointer"
+            className={clsx(
+              'flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all',
+              isExporting
+                ? 'bg-zinc-100 text-zinc-400 opacity-60 cursor-not-allowed'
+                : 'bg-[#F0F0EC] hover:bg-[#EAEAE5] text-zinc-700 cursor-pointer'
+            )}
           >
-            <Download className="w-3.5 h-3.5 text-zinc-600" />
-            <span>Export</span>
+            {isExporting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
+            ) : (
+              <Download className="w-3.5 h-3.5 text-zinc-600" />
+            )}
+            <span>{isExporting ? 'Generating...' : 'Export'}</span>
           </button>
 
           <button
@@ -1117,6 +1167,20 @@ export const DashboardActivityTable: React.FC = () => {
           )
         )}
       </div>
+
+      {/* Hidden container for PDF export rendering */}
+      <div
+        ref={exportContainerRef}
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          left: '-9999px',
+          top: 0,
+          width: '1400px',
+          pointerEvents: 'none',
+          background: '#F6F5F2',
+        }}
+      />
     </div>
   );
 };
