@@ -145,6 +145,23 @@ function getAuditActionPill(action: string): string {
   return `<span class="pill" style="${style}">${escapeHtml(action || 'ACTION')}</span>`;
 }
 
+function formatReason(raw?: string | null): string {
+  if (!raw) return 'Routine administrative action';
+  const trimmed = raw.trim();
+  const lower = trimmed.toLowerCase();
+  if (['0', 'q', 'qw', 'kk', 'k', 'test', 'no', 'none', '-', '.', 'n/a'].includes(lower)) {
+    return 'Routine administrative action';
+  }
+  return trimmed.length > 75 ? trimmed.slice(0, 75) + '...' : trimmed;
+}
+
+function formatStatusTransition(prev?: string | null, next?: string | null): string {
+  if (!prev && !next) return '—';
+  const p = prev || 'Pending';
+  const n = next || 'Updated';
+  return `<span style="font-weight:700;color:#64748B;">${escapeHtml(p)}</span> <span style="color:#94A3B8;font-weight:900;margin:0 4px;">&rarr;</span> <span style="font-weight:700;color:#0F172A;">${escapeHtml(n)}</span>`;
+}
+
 function buildPdfReport(
   tab: 'DEPLOYMENTS' | 'VERIFICATIONS' | 'AUDIT_TRAIL',
   filteredBookings: BookingCompliance[],
@@ -159,22 +176,26 @@ function buildPdfReport(
   let tableRows = '';
   let colSpan = 6;
 
+  const barangayDisplay = meta.barangay && meta.barangay !== 'All Barangays'
+    ? `Barangay ${meta.barangay}`
+    : 'All Barangays (City-Wide)';
+
   if (tab === 'DEPLOYMENTS') {
     title = 'Placement & Bookings Compliance Report';
-    subtitle = 'Republic Act No. 10361 (Batas Kasambahay) Statutory Wage Baseline & Employment Placement Register';
+    subtitle = 'Republic Act No. 10361 (Batas Kasambahay) Mandatory Wage Baseline & Employment Placement Register';
     count = filteredBookings.length;
     colSpan = 6;
     tableHeaders = `
-      <th style="width: 50px; text-align: center;">#</th>
-      <th style="width: 250px;">Employer / Household</th>
-      <th style="width: 250px;">Kasambahay / Worker</th>
-      <th style="width: 170px;">Monthly Wage</th>
-      <th style="width: 200px;">Contract Type</th>
-      <th style="width: 170px; text-align: center;">Compliance Status</th>
+      <th style="width: 5%; text-align: center;">#</th>
+      <th style="width: 25%;">Employer / Household</th>
+      <th style="width: 25%;">Kasambahay / Worker</th>
+      <th style="width: 17%;">Monthly Wage</th>
+      <th style="width: 14%;">Contract Type</th>
+      <th style="width: 14%; text-align: center;">Compliance Status</th>
     `;
     tableRows = filteredBookings.map((b, idx) => {
       const employerName = b.homeownerName || 'Unassigned Employer';
-      const employerSub = b.barangay ? `Brgy. ${b.barangay}` : 'Barangay Not Specified';
+      const employerSub = b.barangay ? `Barangay ${b.barangay}` : 'Barangay Not Specified';
       const workerName = b.workerName || 'Unassigned Worker';
       const workerSub = b.serviceCategory || 'Domestic Worker';
       const wageDisplay = b.offeredWage != null ? `₱${Number(b.offeredWage).toLocaleString()}` : '—';
@@ -200,9 +221,11 @@ function buildPdfReport(
           </td>
           <td>
             <div style="font-weight: 800; font-size: 13px; color: #0F172A;">
-              ${escapeHtml(wageDisplay)} <span style="font-weight: 500; font-size: 11px; color: #64748B;">/ mo</span>
+              ${escapeHtml(wageDisplay)} <span style="font-weight: 500; font-size: 11px; color: #64748B;">/ month</span>
             </div>
-            ${isBelowWage ? '<div style="font-size: 10px; font-weight: 700; color: #DC2626; margin-top: 3px;">⚠️ Below RA 10361 Min. Wage</div>' : ''}
+            ${isBelowWage 
+              ? '<div style="font-size: 10px; font-weight: 700; color: #DC2626; margin-top: 3px;">⚠️ Below RA 10361 Min. Wage</div>' 
+              : '<div style="font-size: 10px; font-weight: 700; color: #059669; margin-top: 3px;">✅ Wage Compliant</div>'}
           </td>
           <td>
             <span class="contract-badge">${escapeHtml(contractDisplay)}</span>
@@ -213,24 +236,24 @@ function buildPdfReport(
     }).join('');
   } else if (tab === 'VERIFICATIONS') {
     title = 'Clearance & Document Verification Report';
-    subtitle = 'Official Kasambahay & Homeowner Regulatory Identity Screening & Document Queue';
+    subtitle = 'Official Kasambahay & Homeowner Regulatory Identity Screening & Document Clearance Queue';
     count = filteredVerifications.length;
     colSpan = 7;
     tableHeaders = `
-      <th style="width: 50px; text-align: center;">#</th>
-      <th style="width: 250px;">Applicant Name</th>
-      <th style="width: 140px;">Role</th>
-      <th style="width: 220px;">Document Type</th>
-      <th style="width: 180px;">Assigned Barangay</th>
-      <th style="width: 160px;">Date Submitted</th>
-      <th style="width: 140px; text-align: center;">Review Status</th>
+      <th style="width: 5%; text-align: center;">#</th>
+      <th style="width: 24%;">Applicant Name</th>
+      <th style="width: 12%;">Account Role</th>
+      <th style="width: 22%;">Document Type</th>
+      <th style="width: 15%;">Assigned Barangay</th>
+      <th style="width: 11%;">Date Submitted</th>
+      <th style="width: 11%; text-align: center;">Review Status</th>
     `;
     tableRows = filteredVerifications.map((v, idx) => {
       const applicantName = v.name || '—';
-      const applicantSub = v.documentNumber ? `ID/Doc #: ${v.documentNumber}` : 'No Document ID';
+      const applicantSub = v.documentNumber ? `ID/Doc #: ${v.documentNumber}` : 'Standard Upload';
       const roleDisplay = v.role === 'KASAMBAHAY' ? 'Kasambahay' : v.role === 'HOMEOWNER' ? 'Homeowner' : (v.role || '—');
       const docDisplay = formatDocType(v.documentType);
-      const brgyDisplay = v.barangay ? `Brgy. ${v.barangay}` : '—';
+      const brgyDisplay = v.barangay ? `Brgy. ${v.barangay}` : 'Barangay Not Stated';
       const dateDisplay = v.submittedDate || '—';
       const rawStatus = v.status || 'Pending';
 
@@ -259,31 +282,28 @@ function buildPdfReport(
     }).join('');
   } else if (tab === 'AUDIT_TRAIL') {
     title = 'System Audit Trail & Administrative Activity Log';
-    subtitle = 'Immutable Record of Official Verifications, Document Actions, and Status Changes';
+    subtitle = 'Official Immutable Record of Administrative Reviews, Verifications, and Account Actions';
     count = filteredAuditLogs.length;
     colSpan = 7;
     tableHeaders = `
-      <th style="width: 50px; text-align: center;">#</th>
-      <th style="width: 220px;">Official / Actor</th>
-      <th style="width: 140px; text-align: center;">Action</th>
-      <th style="width: 240px;">Target Resident & Document</th>
-      <th style="width: 180px;">Status Transition</th>
-      <th style="width: 220px;">Reason / Notes</th>
-      <th style="width: 170px;">Timestamp</th>
+      <th style="width: 4%; text-align: center;">#</th>
+      <th style="width: 18%;">Official / Actor</th>
+      <th style="width: 11%; text-align: center;">Action</th>
+      <th style="width: 24%;">Target Resident & Document</th>
+      <th style="width: 16%;">Status Transition</th>
+      <th style="width: 15%;">Reason / Remarks</th>
+      <th style="width: 12%;">Recorded Timestamp</th>
     `;
     tableRows = filteredAuditLogs.map((a, idx) => {
       const actorName = a.actor_name || 'System Administrator';
-      const actorSub = [a.actor_role, a.actor_barangay ? `Brgy. ${a.actor_barangay}` : ''].filter(Boolean).join(' • ') || 'LGU System';
+      const actorSub = [a.actor_role, a.actor_barangay ? `Brgy. ${a.actor_barangay}` : ''].filter(Boolean).join(' • ') || 'LGU Administration';
       const actionPill = getAuditActionPill(a.action);
-      const targetName = a.target_name || '—';
+      const targetName = a.target_name || 'Resident';
       const targetSub = [formatDocType(a.document_type), a.target_barangay ? `Brgy. ${a.target_barangay}` : ''].filter(Boolean).join(' • ') || '—';
-      const statusChange = (a.previous_status || a.new_status)
-        ? `${a.previous_status || 'Pending'} → ${a.new_status || 'Updated'}`
-        : '—';
-      const rawReason = a.reason || 'Routine administrative action';
-      const reasonDisplay = rawReason.length > 75 ? rawReason.slice(0, 75) + '...' : rawReason;
+      const statusChange = formatStatusTransition(a.previous_status, a.new_status);
+      const reasonDisplay = formatReason(a.reason);
       const timeDisplay = formatAuditDate(a.created_at);
-      const logSub = a.log_id ? `Log #${String(a.log_id).slice(-8)}` : '';
+      const logSub = a.log_id ? `Ref: #${String(a.log_id).slice(-8).toUpperCase()}` : '';
 
       return `
         <tr>
@@ -298,7 +318,7 @@ function buildPdfReport(
             <div class="sub-text">${escapeHtml(targetSub)}</div>
           </td>
           <td>
-            <div style="font-weight: 600; font-size: 11.5px; color: #1E293B;">${escapeHtml(statusChange)}</div>
+            <div style="font-size: 11.5px;">${statusChange}</div>
           </td>
           <td>
             <div style="color: #475569; font-size: 11px; line-height: 1.4;">${escapeHtml(reasonDisplay)}</div>
@@ -314,33 +334,36 @@ function buildPdfReport(
 
   const classification = meta.searchTerm 
     ? `Filtered by "${meta.searchTerm}"` 
-    : 'Complete Active Scope';
+    : 'All Recorded Entries (Unfiltered)';
 
   return `
   <div class="report-wrapper" style="box-sizing: border-box; width: 1400px; background: #FFFFFF; padding: 48px 56px 72px 56px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #0F172A; line-height: 1.5; overflow: hidden;">
     <style>
       .report-wrapper * { box-sizing: border-box; }
       .brand-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: #F8FAFC;
-        border: 1px solid #E2E8F0;
-        padding: 5px 12px;
+        display: inline-block;
+        background: #F1F5F9;
+        border: 1px solid #CBD5E1;
+        padding: 5px 14px;
         border-radius: 999px;
-        font-size: 10px;
-        font-weight: 700;
-        color: #475569;
-        letter-spacing: 0.8px;
-        text-transform: uppercase;
         margin-bottom: 12px;
       }
       .badge-dot {
         display: inline-block;
-        width: 6px;
-        height: 6px;
+        width: 7px;
+        height: 7px;
         border-radius: 50%;
-        background: #10B981;
+        background: #059669;
+        vertical-align: middle;
+        margin-right: 6px;
+      }
+      .badge-text {
+        font-size: 11px;
+        font-weight: 700;
+        color: #1E293B;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        vertical-align: middle;
       }
       .report-title {
         font-size: 26px;
@@ -374,6 +397,7 @@ function buildPdfReport(
       }
       .meta-grid {
         width: 100%;
+        table-layout: fixed;
         margin-top: 24px;
         margin-bottom: 28px;
         border-collapse: separate;
@@ -401,6 +425,7 @@ function buildPdfReport(
       }
       table.data-table {
         width: 100%;
+        table-layout: fixed;
         border-collapse: separate;
         border-spacing: 0;
         background: #FFFFFF;
@@ -426,6 +451,8 @@ function buildPdfReport(
         font-size: 12px;
         border-bottom: 1px solid #F1F5F9;
         vertical-align: middle;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       table.data-table tbody tr:nth-child(even) td {
         background: #FAFAFA;
@@ -451,6 +478,7 @@ function buildPdfReport(
         font-size: 11px;
         font-weight: 700;
         letter-spacing: 0.2px;
+        white-space: nowrap;
       }
       .contract-badge {
         display: inline-block;
@@ -461,6 +489,7 @@ function buildPdfReport(
         font-size: 11px;
         padding: 3px 10px;
         border-radius: 6px;
+        white-space: nowrap;
       }
       .role-badge {
         display: inline-block;
@@ -468,6 +497,7 @@ function buildPdfReport(
         font-size: 11px;
         padding: 3px 10px;
         border-radius: 6px;
+        white-space: nowrap;
       }
       .role-kasambahay {
         background: #EFF6FF;
@@ -500,33 +530,33 @@ function buildPdfReport(
         <td style="border: none; padding: 0; vertical-align: top;">
           <div class="brand-badge">
             <span class="badge-dot"></span>
-            <span>Republic of the Philippines &bull; City of Cagayan de Oro &bull; LGU Administration</span>
+            <span class="badge-text">Republic of the Philippines &bull; City of Cagayan de Oro &bull; LGU Administration</span>
           </div>
           <h1 class="report-title">${escapeHtml(title)}</h1>
           <p class="report-subtitle">${escapeHtml(subtitle)}</p>
         </td>
-        <td style="border: none; padding: 0; vertical-align: top; text-align: right; width: 260px;">
+        <td style="border: none; padding: 0; vertical-align: top; text-align: right; width: 280px;">
           <div class="logo-title">Serbi<span class="logo-orange">Sure</span>.</div>
           <div class="logo-sub">City Administration Portal</div>
           <div style="font-size: 11px; font-weight: 600; color: #475569; margin-top: 6px;">
-            Official Registry Copy
+            Official Registry Document
           </div>
         </td>
       </tr>
     </table>
 
-    <!-- 4-Card Meta / KPI Grid -->
+    <!-- 4-Card Meta / KPI Grid (100% width edge-to-edge) -->
     <table class="meta-grid">
       <tr>
         <td class="meta-card" style="width: 25%;">
           <div class="meta-card-label">Assigned Jurisdiction</div>
-          <div class="meta-card-val">${escapeHtml(meta.barangay)}</div>
+          <div class="meta-card-val">${escapeHtml(barangayDisplay)}</div>
         </td>
-        <td class="meta-card" style="width: 28%;">
+        <td class="meta-card" style="width: 25%;">
           <div class="meta-card-label">Date &amp; Time Generated</div>
           <div class="meta-card-val">${escapeHtml(meta.generatedAt)}</div>
         </td>
-        <td class="meta-card" style="width: 22%;">
+        <td class="meta-card" style="width: 25%;">
           <div class="meta-card-label">Total Records Exported</div>
           <div class="meta-card-val" style="color: #EA580C;">${count} Record${count === 1 ? '' : 's'}</div>
         </td>
@@ -537,7 +567,7 @@ function buildPdfReport(
       </tr>
     </table>
 
-    <!-- Primary Data Table -->
+    <!-- Primary Data Table (Occupies 100% width edge-to-edge) -->
     <table class="data-table">
       <thead>
         <tr>
@@ -561,12 +591,12 @@ function buildPdfReport(
             Confidential Document &bull; Protected under Republic Act No. 10361 (Batas Kasambahay) and Republic Act No. 10173 (Data Privacy Act of 2012).
           </div>
         </td>
-        <td style="text-align: right; width: 320px;">
+        <td style="text-align: right; width: 340px;">
           <div style="font-size: 11px; font-weight: 700; color: #475569;">
             City Government of Cagayan de Oro
           </div>
           <div style="font-size: 10px; color: #94A3B8; margin-top: 4px;">
-            Official Administrative Export &bull; Verified Record
+            Official Administrative Export &bull; Verified Registry Copy
           </div>
         </td>
       </tr>
@@ -823,8 +853,9 @@ export const DashboardActivityTable: React.FC = () => {
         scrollX: 0,
         scrollY: 0,
       });
+      const orientation = canvas.width >= canvas.height ? 'landscape' : 'portrait';
       const pdf = new jsPDF({
-        orientation: 'landscape',
+        orientation,
         unit: 'px',
         format: [canvas.width, canvas.height],
       });
