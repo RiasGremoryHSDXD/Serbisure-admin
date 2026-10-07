@@ -1,14 +1,31 @@
+// ============================================================================
+// BACKEND TARGET TOGGLE
+// Set to true  (or 'local', 1)  -> Local backend  (http://localhost:8000) [DEFAULT]
+// Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app)
+//
+// When deploying to production, simply change this line to false (or 'vercel').
+// NOTE: Strictly NO automatic fallback between servers.
+// ============================================================================
+export const USE_LOCAL_BACKEND: boolean | string | number = true;
+
+export const LOCAL_API_URL = 'http://localhost:8000';
 export const VERCEL_API_URL = 'https://serbisure-backend-rho.vercel.app';
 
 /**
- * Resolves the primary API base URL:
- * 1. Explicit VITE_API_URL from environment (.env)
- * 2. Defaults to VERCEL_API_URL if unset or empty
+ * Resolves the active API base URL based on USE_LOCAL_BACKEND:
+ * - true  | 'local'  | 1  => http://localhost:8000
+ * - false | 'vercel' | 2  => https://serbisure-backend-rho.vercel.app
+ * Strictly NO automatic runtime fallback between servers.
  */
 function resolveBaseUrl(): string {
-  const envUrl = (import.meta as any).env?.VITE_API_URL;
-  if (typeof envUrl === 'string' && envUrl.trim().length > 0 && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-    return envUrl.trim();
+  if (
+    USE_LOCAL_BACKEND === true ||
+    USE_LOCAL_BACKEND === 'local' ||
+    USE_LOCAL_BACKEND === 'LOCAL' ||
+    USE_LOCAL_BACKEND === 1 ||
+    USE_LOCAL_BACKEND === '1'
+  ) {
+    return LOCAL_API_URL;
   }
   return VERCEL_API_URL;
 }

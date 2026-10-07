@@ -15,7 +15,8 @@ import {
   X,
   Shield,
   Save,
-  Search
+  Search,
+  Lock
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAdmin } from '../context/AdminContext';
@@ -162,7 +163,6 @@ export const SettingsPage: React.FC = () => {
     cityCode: '104305000',
     cityName: 'City of Cagayan De Oro',
     barangayName: '',
-    customBarangayName: '',
     street: '',
     contactNumber: '',
     zipcode: '9000',
@@ -170,6 +170,7 @@ export const SettingsPage: React.FC = () => {
   });
   const [addBrgyError, setAddBrgyError] = useState<string | null>(null);
   const [isSubmittingBrgy, setIsSubmittingBrgy] = useState(false);
+  const [lockedQuickSetupBarangay, setLockedQuickSetupBarangay] = useState<string | null>(null);
 
   // PSGC Location Dropdown Lists
   const [regionsList, setRegionsList] = useState<Region[]>([]);
@@ -248,7 +249,6 @@ export const SettingsPage: React.FC = () => {
         cityCode: cityCode,
         cityName: cityName,
         barangayName: '',
-        customBarangayName: '',
         zipcode: zip,
       }));
     } finally {
@@ -284,7 +284,6 @@ export const SettingsPage: React.FC = () => {
         cityCode: cityCode,
         cityName: cityName,
         barangayName: '',
-        customBarangayName: '',
         zipcode: zip,
       }));
     } finally {
@@ -308,7 +307,6 @@ export const SettingsPage: React.FC = () => {
         cityCode: cityCode,
         cityName: cityName,
         barangayName: '',
-        customBarangayName: '',
         zipcode: zip,
       }));
     } finally {
@@ -440,13 +438,25 @@ export const SettingsPage: React.FC = () => {
   const totalActiveLgus = useMemo(() => allDirectoryItems.filter((i) => i.hasLguAccount).length, [allDirectoryItems]);
   const totalNeedsSetup = useMemo(() => allDirectoryItems.filter((i) => !i.hasLguAccount).length, [allDirectoryItems]);
 
-  const handleQuickSetupLgu = (bgyName: string) => {
+  const handleQuickSetupLgu = async (bgyName: string) => {
     setAddBrgyError(null);
     const clean = bgyName.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
-    const match = barangaysList.find(
+
+    let currentBrgys = barangaysList;
+    if (currentBrgys.length === 0) {
+      try {
+        currentBrgys = await getBarangays('104305000');
+        setBarangaysList(currentBrgys);
+      } catch {
+        // preserve current list
+      }
+    }
+
+    const match = currentBrgys.find(
       (b) => b.name.toLowerCase() === clean.toLowerCase() || (b.displayName && b.displayName.toLowerCase() === clean.toLowerCase())
     );
 
+    setLockedQuickSetupBarangay(clean);
     setAddBrgyForm((prev) => ({
       ...prev,
       regionCode: '100000000',
@@ -455,10 +465,11 @@ export const SettingsPage: React.FC = () => {
       provinceName: 'Misamis Oriental',
       cityCode: '104305000',
       cityName: 'City of Cagayan De Oro',
-      barangayName: match ? match.name : '__custom__',
-      customBarangayName: match ? '' : clean,
+      barangayName: match ? match.name : clean,
       street: '',
       contactNumber: '',
+      zipcode: '9000',
+      country: 'Philippines',
     }));
     setShowAddBarangay(true);
   };
@@ -618,9 +629,7 @@ export const SettingsPage: React.FC = () => {
 
   const handleAddBarangaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const rawName = addBrgyForm.barangayName === '__custom__'
-      ? addBrgyForm.customBarangayName.trim()
-      : addBrgyForm.barangayName.trim();
+    const rawName = addBrgyForm.barangayName.trim();
 
     if (!rawName) {
       setAddBrgyError('Please select a Barangay from the dropdown list.');
@@ -677,10 +686,10 @@ export const SettingsPage: React.FC = () => {
       setAddBrgyForm((prev) => ({
         ...prev,
         barangayName: '',
-        customBarangayName: '',
         street: '',
         contactNumber: '',
       }));
+      setLockedQuickSetupBarangay(null);
       setShowAddBarangay(false);
     } catch (err: unknown) {
       setAddBrgyError(sanitizeUserFriendlyError(err instanceof Error ? err.message : 'Failed to register barangay in database.'));
@@ -739,12 +748,14 @@ export const SettingsPage: React.FC = () => {
               type="button"
               onClick={() => {
                 setAddBrgyError(null);
+                setLockedQuickSetupBarangay(null);
                 setAddBrgyForm((prev) => ({
                   ...prev,
                   barangayName: '',
-                  customBarangayName: '',
                   street: '',
                   contactNumber: '',
+                  zipcode: '9000',
+                  country: 'Philippines',
                 }));
                 setShowAddBarangay(true);
               }}
@@ -1298,25 +1309,56 @@ export const SettingsPage: React.FC = () => {
             className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Modal Header */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-[#FFB380]" />
-                <h3 className="text-base font-black font-display text-[#0D0D11]">
-                  Add New Barangay
-                </h3>
+              <div className="flex items-center gap-2.5">
+                {lockedQuickSetupBarangay ? (
+                  <div className="w-9 h-9 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                ) : (
+                  <div className="w-9 h-9 rounded-2xl bg-orange-500/10 flex items-center justify-center text-[#FFB380] shrink-0">
+                    <Building2 className="w-4 h-4 text-orange-500" />
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-base font-black font-display text-[#0D0D11]">
+                    {lockedQuickSetupBarangay ? `Setup LGU: Brgy. ${lockedQuickSetupBarangay}` : 'Add New Barangay'}
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 font-medium">
+                    {lockedQuickSetupBarangay
+                      ? 'Configure administrative desk details for this registered community.'
+                      : 'Select from official Philippine Standard Geographic Code (PSGC) places.'}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowAddBarangay(false)}
-                className="text-zinc-400 hover:text-zinc-600 cursor-pointer p-1"
+                onClick={() => {
+                  setShowAddBarangay(false);
+                  setLockedQuickSetupBarangay(null);
+                  setAddBrgyError(null);
+                }}
+                className="text-zinc-400 hover:text-zinc-600 cursor-pointer p-1.5 rounded-xl hover:bg-zinc-100 transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-xs text-zinc-400 font-medium">
-              Select from official Philippine Standard Geographic Code (PSGC) places to avoid typos and preserve data integrity.
-            </p>
+            {/* Jurisdiction Locked Notice */}
+            {lockedQuickSetupBarangay ? (
+              <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+                <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <span className="font-bold">Jurisdiction Locked:</span> Geographic location is locked to{' '}
+                  <strong className="font-black text-amber-950">Brgy. {lockedQuickSetupBarangay}</strong> (Cagayan de Oro, Misamis Oriental) because registered citizens belong to this barangay. Location fields cannot be modified to prevent accidental reassignment.
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-400 font-medium">
+                Select from official Philippine Standard Geographic Code (PSGC) places to avoid typos and preserve data integrity.
+              </p>
+            )}
 
             {addBrgyError && (
               <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
@@ -1328,15 +1370,25 @@ export const SettingsPage: React.FC = () => {
             <form onSubmit={handleAddBarangaySubmit} className="space-y-4">
               {/* Region Select Dropdown */}
               <div>
-                <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                  Region
+                <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                  <span>Region</span>
+                  {lockedQuickSetupBarangay && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                      <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                    </span>
+                  )}
                 </label>
                 <div className="relative">
                   <select
                     value={addBrgyForm.regionCode}
                     onChange={(e) => handleRegionChange(e.target.value)}
-                    disabled={loadingLocations}
-                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8"
+                    disabled={Boolean(lockedQuickSetupBarangay) || loadingLocations}
+                    className={clsx(
+                      "w-full border rounded-2xl px-4 py-2.5 text-xs font-medium appearance-none pr-8 transition",
+                      lockedQuickSetupBarangay
+                        ? "border-zinc-200 bg-zinc-50 text-zinc-600 cursor-not-allowed select-none"
+                        : "border-zinc-200 bg-white text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] cursor-pointer disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                    )}
                   >
                     {regionsList.map((r) => (
                       <option key={r.code} value={r.code}>
@@ -1356,15 +1408,25 @@ export const SettingsPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Province Dropdown */}
                 <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                    Province
+                  <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    <span>Province</span>
+                    {lockedQuickSetupBarangay && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                        <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                      </span>
+                    )}
                   </label>
                   <div className="relative">
                     <select
                       value={addBrgyForm.provinceCode}
                       onChange={(e) => handleProvinceChange(e.target.value)}
-                      disabled={loadingLocations || provincesList.length === 0}
-                      className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8 disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                      disabled={Boolean(lockedQuickSetupBarangay) || loadingLocations || provincesList.length === 0}
+                      className={clsx(
+                        "w-full border rounded-2xl px-4 py-2.5 text-xs font-medium appearance-none pr-8 transition",
+                        lockedQuickSetupBarangay
+                          ? "border-zinc-200 bg-zinc-50 text-zinc-600 cursor-not-allowed select-none"
+                          : "border-zinc-200 bg-white text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] cursor-pointer disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                      )}
                     >
                       {provincesList.map((p) => (
                         <option key={p.code} value={p.code}>
@@ -1382,15 +1444,25 @@ export const SettingsPage: React.FC = () => {
 
                 {/* City / Municipality Dropdown */}
                 <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                    City / Municipality
+                  <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    <span>City / Municipality</span>
+                    {lockedQuickSetupBarangay && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                        <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                      </span>
+                    )}
                   </label>
                   <div className="relative">
                     <select
                       value={addBrgyForm.cityCode}
                       onChange={(e) => handleCityChange(e.target.value)}
-                      disabled={loadingLocations || citiesList.length === 0}
-                      className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8 disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                      disabled={Boolean(lockedQuickSetupBarangay) || loadingLocations || citiesList.length === 0}
+                      className={clsx(
+                        "w-full border rounded-2xl px-4 py-2.5 text-xs font-medium appearance-none pr-8 transition",
+                        lockedQuickSetupBarangay
+                          ? "border-zinc-200 bg-zinc-50 text-zinc-600 cursor-not-allowed select-none"
+                          : "border-zinc-200 bg-white text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] cursor-pointer disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                      )}
                     >
                       {citiesList.map((c) => (
                         <option key={c.code} value={c.code}>
@@ -1409,18 +1481,31 @@ export const SettingsPage: React.FC = () => {
 
               {/* Barangay Dropdown */}
               <div>
-                <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                  Barangay Name <span className="text-red-500">*</span>
+                <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                  <span>
+                    Barangay Name <span className="text-red-500">*</span>
+                  </span>
+                  {lockedQuickSetupBarangay && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                      <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                    </span>
+                  )}
                 </label>
                 <div className="relative">
                   <select
                     value={addBrgyForm.barangayName}
                     onChange={(e) => {
+                      if (lockedQuickSetupBarangay) return;
                       setAddBrgyError(null);
                       setAddBrgyForm({ ...addBrgyForm, barangayName: e.target.value });
                     }}
-                    disabled={loadingLocations || barangaysList.length === 0}
-                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8 disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                    disabled={Boolean(lockedQuickSetupBarangay) || loadingLocations || barangaysList.length === 0}
+                    className={clsx(
+                      "w-full border rounded-2xl px-4 py-2.5 text-xs font-medium appearance-none pr-8 transition",
+                      lockedQuickSetupBarangay
+                        ? "border-zinc-200 bg-zinc-50 text-zinc-600 cursor-not-allowed select-none"
+                        : "border-zinc-200 bg-white text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] cursor-pointer disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                    )}
                   >
                     <option value="">
                       -- Select Barangay {barangaysList.length > 0 ? `(${barangaysList.length} Options)` : ''} --
@@ -1432,12 +1517,21 @@ export const SettingsPage: React.FC = () => {
                         return existingClean === cleanB;
                       });
                       return (
-                        <option key={b.code} value={b.name} disabled={isAlreadyAdded}>
+                        <option
+                          key={b.code}
+                          value={b.name}
+                          disabled={isAlreadyAdded && addBrgyForm.barangayName !== b.name}
+                        >
                           {b.displayName || b.name} {isAlreadyAdded ? '✓ (Already Registered)' : ''}
                         </option>
                       );
                     })}
-                    <option value="__custom__">+ Other / Enter Custom Barangay</option>
+                    {/* In locked setup mode, ensure the target barangay is in the options list if not already present in the PSGC list */}
+                    {lockedQuickSetupBarangay && !barangaysList.some((b) => b.name.toLowerCase() === addBrgyForm.barangayName.toLowerCase()) && (
+                      <option value={addBrgyForm.barangayName}>
+                        {addBrgyForm.barangayName.startsWith('Barangay') || addBrgyForm.barangayName.startsWith('Brgy.') ? addBrgyForm.barangayName : `Brgy. ${addBrgyForm.barangayName}`}
+                      </option>
+                    )}
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400">
                     <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
@@ -1447,27 +1541,6 @@ export const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Custom Barangay Input if '__custom__' selected */}
-              {addBrgyForm.barangayName === '__custom__' && (
-                <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                    Custom Barangay Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={60}
-                    value={addBrgyForm.customBarangayName}
-                    onChange={(e) => {
-                      setAddBrgyError(null);
-                      setAddBrgyForm({ ...addBrgyForm, customBarangayName: e.target.value });
-                    }}
-                    placeholder="e.g. Upper Balulang / Sitio Zone 9"
-                    autoFocus
-                    className="w-full border border-orange-200 bg-orange-50/20 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380]"
-                  />
-                </div>
-              )}
-
               {/* House No. / Street / Zone / Subdivision */}
               <div>
                 <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
@@ -1476,6 +1549,7 @@ export const SettingsPage: React.FC = () => {
                 <input
                   type="text"
                   maxLength={100}
+                  autoFocus={Boolean(lockedQuickSetupBarangay)}
                   value={addBrgyForm.street}
                   onChange={(e) => setAddBrgyForm({ ...addBrgyForm, street: e.target.value })}
                   placeholder="e.g. Zone 1, Purok 3 / Barangay Hall Compound"
@@ -1513,28 +1587,47 @@ export const SettingsPage: React.FC = () => {
               {/* Zip Code and Country Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                    Zip Code
+                  <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    <span>Zip Code</span>
+                    {lockedQuickSetupBarangay && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                        <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                      </span>
+                    )}
                   </label>
                   <input
                     type="text"
                     maxLength={4}
                     value={addBrgyForm.zipcode}
-                    onChange={(e) => setAddBrgyForm({ ...addBrgyForm, zipcode: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                    readOnly={Boolean(lockedQuickSetupBarangay)}
+                    onChange={(e) => {
+                      if (lockedQuickSetupBarangay) return;
+                      setAddBrgyForm({ ...addBrgyForm, zipcode: e.target.value.replace(/\D/g, '').slice(0, 4) });
+                    }}
                     placeholder="e.g. 9000"
-                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380]"
+                    className={clsx(
+                      "w-full border rounded-2xl px-4 py-2.5 text-xs font-medium focus:outline-none transition",
+                      lockedQuickSetupBarangay
+                        ? "border-zinc-200 bg-zinc-50 text-zinc-600 cursor-not-allowed select-none"
+                        : "border-zinc-200 text-[#0D0D11] focus:ring-2 focus:ring-[#FFB380]"
+                    )}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                    Country
+                  <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    <span>Country</span>
+                    {lockedQuickSetupBarangay && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                        <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                      </span>
+                    )}
                   </label>
                   <input
                     type="text"
                     value={addBrgyForm.country}
                     readOnly
-                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-zinc-700 bg-zinc-50 cursor-not-allowed focus:outline-none"
+                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-zinc-600 bg-zinc-50 cursor-not-allowed focus:outline-none select-none"
                   />
                 </div>
               </div>
@@ -1542,7 +1635,11 @@ export const SettingsPage: React.FC = () => {
               <div className="flex items-center justify-end gap-2.5 pt-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddBarangay(false)}
+                  onClick={() => {
+                    setShowAddBarangay(false);
+                    setLockedQuickSetupBarangay(null);
+                    setAddBrgyError(null);
+                  }}
                   className="px-4 py-2 rounded-full bg-[#F0F0EC] hover:bg-[#E5E5E0] text-zinc-700 text-xs font-black font-display cursor-pointer transition"
                 >
                   Cancel
@@ -1559,7 +1656,7 @@ export const SettingsPage: React.FC = () => {
                       <span>Saving to Database...</span>
                     </>
                   ) : (
-                    <span>Add Barangay</span>
+                    <span>{lockedQuickSetupBarangay ? 'Setup LGU Desk' : 'Add Barangay'}</span>
                   )}
                 </button>
               </div>
