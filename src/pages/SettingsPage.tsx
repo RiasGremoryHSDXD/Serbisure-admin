@@ -731,7 +731,7 @@ export const SettingsPage: React.FC = () => {
 
       {isSuperAdmin ? (
         /* ---------------- SUPERADMIN: BARANGAY DIRECTORY & COVERAGE ---------------- */
-        <div className="bg-white rounded-3xl p-8 space-y-6">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-[#0D0D11] font-black font-display text-base">
@@ -768,50 +768,70 @@ export const SettingsPage: React.FC = () => {
 
           {/* Filter Tabs & Search Controls */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-            <div className="flex items-center gap-1 p-1 bg-[#F0F0EC] rounded-full w-fit">
+            <div className="grid grid-cols-3 w-full sm:w-auto sm:flex sm:items-center gap-1.5 p-1 bg-[#F0F0EC] rounded-full select-none">
+              {/* All Filter */}
               <button
                 type="button"
                 onClick={() => {
                   setDirectoryFilter('ALL');
                   setCurrentPage(1);
                 }}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold font-display transition cursor-pointer ${
+                className={`flex items-center justify-center gap-1 px-3 sm:px-4 py-2 rounded-full text-xs font-bold font-display whitespace-nowrap transition cursor-pointer ${
                   directoryFilter === 'ALL'
-                    ? 'bg-white text-zinc-900 shadow-xs'
+                    ? 'bg-white text-zinc-950 shadow-xs'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
-                All ({allDirectoryItems.length})
+                <span>All</span>
+                <span className={`text-[11px] font-black ${
+                  directoryFilter === 'ALL' ? 'text-zinc-900' : 'text-zinc-400'
+                }`}>
+                  ({allDirectoryItems.length})
+                </span>
               </button>
+
+              {/* Active LGUs Filter */}
               <button
                 type="button"
                 onClick={() => {
                   setDirectoryFilter('ACTIVE');
                   setCurrentPage(1);
                 }}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold font-display transition cursor-pointer flex items-center gap-1.5 ${
+                className={`flex items-center justify-center gap-1 px-3 sm:px-4 py-2 rounded-full text-xs font-bold font-display whitespace-nowrap transition cursor-pointer ${
                   directoryFilter === 'ACTIVE'
-                    ? 'bg-white text-zinc-900 shadow-xs'
+                    ? 'bg-white text-zinc-950 shadow-xs'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Active LGUs ({totalActiveLgus})
+                <span className="hidden sm:inline">Active LGUs</span>
+                <span className="sm:hidden">Active</span>
+                <span className={`text-[11px] font-black ${
+                  directoryFilter === 'ACTIVE' ? 'text-emerald-600' : 'text-zinc-400'
+                }`}>
+                  ({totalActiveLgus})
+                </span>
               </button>
+
+              {/* Needs Account Filter */}
               <button
                 type="button"
                 onClick={() => {
                   setDirectoryFilter('NEEDS_ACCOUNT');
                   setCurrentPage(1);
                 }}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold font-display transition cursor-pointer flex items-center gap-1.5 ${
+                className={`flex items-center justify-center gap-1 px-3 sm:px-4 py-2 rounded-full text-xs font-bold font-display whitespace-nowrap transition cursor-pointer ${
                   directoryFilter === 'NEEDS_ACCOUNT'
-                    ? 'bg-white text-zinc-900 shadow-xs'
+                    ? 'bg-white text-zinc-950 shadow-xs'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
-                Needs Account ({totalNeedsSetup})
+                <span className="hidden sm:inline">Needs Account</span>
+                <span className="sm:hidden">Needs LGU</span>
+                <span className={`text-[11px] font-black ${
+                  directoryFilter === 'NEEDS_ACCOUNT' ? 'text-amber-600' : 'text-zinc-400'
+                }`}>
+                  ({totalNeedsSetup})
+                </span>
               </button>
             </div>
 
@@ -832,7 +852,7 @@ export const SettingsPage: React.FC = () => {
 
           {/* Directory Table */}
           <div className="overflow-x-auto border border-zinc-100 rounded-2xl">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="w-full text-left border-collapse text-xs min-w-[860px]">
               <thead>
                 <tr className="bg-zinc-50/80 text-[11px] font-black uppercase tracking-wider text-zinc-400 font-display border-b border-zinc-100">
                   <th className="py-3 px-4">Barangay Name</th>
@@ -980,7 +1000,7 @@ export const SettingsPage: React.FC = () => {
         </div>
       ) : (
         /* ---------------- ADMIN: BARANGAY DESK PROFILE ---------------- */
-        <div className="bg-white rounded-3xl p-8 space-y-6">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-100 pb-5">
             <div>
               <div className="flex items-center gap-2">
@@ -1159,7 +1179,7 @@ export const SettingsPage: React.FC = () => {
       {/* ========================================================= */}
       {/* SECTION 2: CHANGE PASSWORD (SHARED FOR BOTH ROLES)        */}
       {/* ========================================================= */}
-      <div className="bg-white rounded-3xl p-8 space-y-6">
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 space-y-6">
         <div className="border-b border-zinc-100 pb-5">
           <div className="flex items-center gap-2">
             <KeyRound className="w-5 h-5 text-[#FFB380]" />

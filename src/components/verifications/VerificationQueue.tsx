@@ -160,7 +160,7 @@ export const VerificationQueue: React.FC = () => {
   };
 
   return (
-      <div className="bg-white rounded-3xl p-6 sm:p-7 h-full flex flex-col">
+    <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 h-full flex flex-col">
       {/* Header with Filters */}
       <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between pb-5 gap-3.5">
         <div>
@@ -314,7 +314,7 @@ export const VerificationQueue: React.FC = () => {
         </div>
       ) : (
         <div className="overflow-x-auto mt-2">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[500px]">
             <thead>
               <tr className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 font-display">
                 <th className="py-2.5 px-2.5">User & Role</th>
