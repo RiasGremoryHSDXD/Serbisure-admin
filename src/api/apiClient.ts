@@ -7,7 +7,7 @@ export const VERCEL_API_URL = 'https://serbisure-backend-rho.vercel.app';
  */
 function resolveBaseUrl(): string {
   const envUrl = (import.meta as any).env?.VITE_API_URL;
-  if (typeof envUrl === 'string' && envUrl.trim().length > 0) {
+  if (typeof envUrl === 'string' && envUrl.trim().length > 0 && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
     return envUrl.trim();
   }
   return VERCEL_API_URL;
@@ -135,30 +135,6 @@ export async function fetchApi<T>(endpoint: string, options: FetchApiOptions = {
 
       // Handle HTTP errors
       if (!response.ok) {
-        // If an endpoint returns 404 OR a 5xx server error on Vercel cloud,
-        // gracefully attempt the local backend if reachable (e.g. newly added
-        // feature, or a cloud-only NameError like the inbox public_id bug)
-        if ((response.status === 404 || response.status >= 500) && isCloudBackend()) {
-          try {
-            const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-            const localFallbackUrl = `http://127.0.0.1:8000${cleanPath}`;
-            const fallbackController = new AbortController();
-            const fallbackTimer = setTimeout(() => fallbackController.abort(), 4000);
-            const fallbackRes = await fetch(localFallbackUrl, {
-              ...fetchOptions,
-              headers,
-              signal: fallbackController.signal,
-            });
-            clearTimeout(fallbackTimer);
-            if (fallbackRes.ok) {
-              console.info(`[API] Endpoint 404 on cloud; resolved via local backend fallback: ${cleanPath}`);
-              return await fallbackRes.json();
-            }
-          } catch {
-            // Local backend not reachable, proceed to regular error handling
-          }
-        }
-
         // Cold-start / Gateway errors on Vercel: Retry once if attempt <= maxRetries
         if ((response.status === 502 || response.status === 503 || response.status === 504) && attempt <= maxRetries) {
           console.warn(`[API] Cloud backend cold start detected (HTTP ${response.status}). Retrying (${attempt}/${maxRetries})...`);
@@ -168,6 +144,11 @@ export async function fetchApi<T>(endpoint: string, options: FetchApiOptions = {
 
         // Notify app if session is unauthorized / expired
         if (response.status === 401 && typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem('serbisure_admin_token');
+          } catch {
+            // ignore
+          }
           window.dispatchEvent(new CustomEvent('serbisure:auth_expired'));
         }
 
@@ -193,29 +174,6 @@ export async function fetchApi<T>(endpoint: string, options: FetchApiOptions = {
       return await response.json();
     } catch (err: any) {
       clearTimeout(timer);
-
-      // Network disconnect or connection refused: attempt alternate backend before retrying
-      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
-        const altBase = isCloudBackend() ? 'http://127.0.0.1:8000' : VERCEL_API_URL;
-        try {
-          const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-          const altUrl = `${altBase}${cleanPath}`;
-          const altController = new AbortController();
-          const altTimer = setTimeout(() => altController.abort(), 4000);
-          const altRes = await fetch(altUrl, {
-            ...fetchOptions,
-            headers,
-            signal: altController.signal,
-          });
-          clearTimeout(altTimer);
-          if (altRes.ok) {
-            console.info(`[API] Primary connection failed; resolved via alternate backend: ${altUrl}`);
-            return await altRes.json();
-          }
-        } catch {
-          // Alternate backend also failed
-        }
-      }
 
       // If aborted due to timeout
       if (err.name === 'AbortError') {
