@@ -6,7 +6,7 @@
 // When deploying to production, simply change this line to false (or 'vercel').
 // NOTE: Strictly NO automatic fallback between servers.
 // ============================================================================
-export const USE_LOCAL_BACKEND: boolean | string | number = false;
+export const USE_LOCAL_BACKEND: boolean | string | number = true;
 
 export const LOCAL_API_URL = 'http://localhost:8000';
 export const VERCEL_API_URL = 'https://serbisure-backend-rho.vercel.app';

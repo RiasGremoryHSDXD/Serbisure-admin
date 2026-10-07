@@ -14,7 +14,8 @@ import {
   ZoomIn,
   Search,
   ExternalLink,
-  Lock
+  Lock,
+  ChevronLeft
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAdmin } from '../../context/AdminContext';
@@ -575,7 +576,7 @@ export const UserDirectory: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-white">
       {/* Title & Filter Bar */}
-      <div className="px-6 py-3.5 bg-white border-b border-zinc-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
+      <div className="px-4 sm:px-6 py-3 sm:py-3.5 bg-white border-b border-zinc-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 shrink-0">
         <div>
           <h1 className="text-xl font-black font-display text-[#0D0D11] tracking-tight">
             Users
@@ -615,7 +616,7 @@ export const UserDirectory: React.FC = () => {
           )}
 
           {/* Segmented Tab Switcher */}
-          <div className="flex items-center bg-[#EAEAE5] p-1 rounded-full">
+          <div className="flex items-center bg-[#EAEAE5] p-1 rounded-full overflow-x-auto max-w-full">
             <button
               onClick={() => {
                 setActiveTab('HOMEOWNER');
@@ -700,7 +701,7 @@ export const UserDirectory: React.FC = () => {
       {/* Connected Three-Zone Directory Container (30% / 40% / 30%) */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-10 w-full overflow-hidden bg-white">
         {/* Zone 1: User List (col-span-3 = 30%) */}
-        <div className="lg:col-span-3 flex flex-col h-full border-r border-zinc-200/80 overflow-hidden bg-white">
+        <div className={clsx("lg:col-span-3 flex flex-col h-full border-r border-zinc-200/80 overflow-hidden bg-white", messageThreadUserId !== null ? "hidden lg:flex" : "flex")}>
           
           {/* Search Bar */}
           <div className="px-4 pt-4 pb-3 border-b border-zinc-100 shrink-0">
@@ -837,7 +838,7 @@ export const UserDirectory: React.FC = () => {
         </div>
 
         {/* Zone 2: Chat Panel (col-span-4 = 40%) */}
-        <div id="admin-chat-panel" className="lg:col-span-4 flex flex-col h-full border-r border-zinc-200/80 overflow-hidden bg-white">
+        <div id="admin-chat-panel" className={clsx("lg:col-span-4 flex flex-col h-full border-r border-zinc-200/80 overflow-hidden bg-white", messageThreadUserId === null ? "hidden lg:flex" : "flex")}>
           {messageThreadUserId === null ? (
             /* Chat Panel Empty State */
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white">
@@ -855,12 +856,23 @@ export const UserDirectory: React.FC = () => {
             /* Chat Panel Active Thread */
             <div className="flex-1 flex flex-col h-full overflow-hidden">
               {/* Header */}
-              <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between shrink-0 bg-white">
-                <div className="flex items-center gap-3 min-w-0">
+              <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-zinc-100 flex items-center justify-between shrink-0 bg-white">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  {/* Mobile Back Button to return to User List */}
+                  <button
+                    type="button"
+                    onClick={() => setMessageThreadUserId(null)}
+                    className="p-1.5 -ml-1.5 rounded-full text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors cursor-pointer lg:hidden shrink-0"
+                    title="Back to users"
+                    aria-label="Back to users"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+
                   <UserAvatar
                     src={threadPartner?.avatar}
                     name={threadPartner?.name || 'User'}
-                    sizeClass="w-10 h-10 min-w-[40px] min-h-[40px]"
+                    sizeClass="w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] sm:min-w-[40px] min-h-[36px] sm:min-h-[40px]"
                     textClass="font-black text-xs text-zinc-600 font-display"
                   />
                   <div className="min-w-0">
@@ -1215,7 +1227,7 @@ export const UserDirectory: React.FC = () => {
         </div>
 
         {/* Zone 3: Account Details (col-span-3 = 30%) */}
-        <div className="lg:col-span-3 flex flex-col h-full overflow-y-auto bg-white p-6 space-y-6">
+        <div className="hidden lg:flex lg:col-span-3 flex-col h-full overflow-y-auto bg-white p-6 space-y-6">
           {!selectedUser ? (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-400 text-xs font-medium">
               Select a user to view profile details.

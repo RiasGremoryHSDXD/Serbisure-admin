@@ -853,7 +853,7 @@ export const DashboardActivityTable: React.FC = () => {
   );
 
   return (
-    <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-xs border border-zinc-100/80">
+    <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 shadow-xs border border-zinc-100/80">
       {/* Top Tabs & Controls Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5">
         
@@ -995,7 +995,7 @@ export const DashboardActivityTable: React.FC = () => {
             </div>
           ) : (
             <>
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[620px]">
                 <thead>
                   <tr className="text-zinc-400 font-extrabold font-display uppercase tracking-wider text-[11px]">
                     <th className="pb-3 px-3">Employer</th>
@@ -1117,7 +1117,7 @@ export const DashboardActivityTable: React.FC = () => {
             </div>
           ) : (
             <>
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[580px]">
                 <thead>
                   <tr className="text-zinc-400 font-extrabold font-display uppercase tracking-wider text-[11px]">
                     <th className="pb-3 px-3">Applicant</th>
@@ -1240,7 +1240,7 @@ export const DashboardActivityTable: React.FC = () => {
             </div>
           ) : (
             <>
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[680px]">
                 <thead>
                   <tr className="text-zinc-400 font-extrabold font-display uppercase tracking-wider text-[11px]">
                     <th className="pb-3 px-3">Official / Actor</th>

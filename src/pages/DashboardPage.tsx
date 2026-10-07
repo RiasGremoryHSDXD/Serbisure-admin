@@ -42,12 +42,12 @@ export const DashboardPage: React.FC = () => {
 
 
   return (
-    <div className="space-y-7 animate-in fade-in duration-200">
+    <div className="space-y-5 sm:space-y-7 animate-in fade-in duration-200">
       
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-black font-display text-[#0D0D11] tracking-tight">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black font-display text-[#0D0D11] tracking-tight">
             {isSuperadmin ? 'City Dashboard' : `Brgy. ${selectedBarangay} Dashboard`}
           </h1>
           <p className="text-xs text-zinc-400 mt-1 font-medium">
@@ -58,7 +58,7 @@ export const DashboardPage: React.FC = () => {
         <button
           onClick={() => refreshDashboardStats()}
           disabled={isLoadingDashboardStats}
-          className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-zinc-100 text-zinc-700 rounded-full text-xs font-bold transition-all cursor-pointer shadow-xs w-fit"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-zinc-100 text-zinc-700 rounded-full text-xs font-bold transition-all cursor-pointer shadow-xs w-full sm:w-fit shrink-0"
           title="Refresh real-time data from backend"
         >
           <RotateCw className={`w-3.5 h-3.5 ${isLoadingDashboardStats ? 'animate-spin text-[#FFB380]' : 'text-zinc-500'}`} />
@@ -67,7 +67,7 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* Top 3 Stat Cards (SerbiSure Pastel Bento Style) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
         <StatCard
           label="TOTAL REGISTERED WORKERS"
           value={totalWorkers}
@@ -80,12 +80,14 @@ export const DashboardPage: React.FC = () => {
           icon={Briefcase}
           color="mint"
         />
-        <StatCard
-          label="CURRENTLY AVAILABLE"
-          value={totalAvailable}
-          icon={UserCheck}
-          color="sky"
-        />
+        <div className="sm:col-span-2 lg:col-span-1">
+          <StatCard
+            label="CURRENTLY AVAILABLE"
+            value={totalAvailable}
+            icon={UserCheck}
+            color="sky"
+          />
+        </div>
       </div>
 
       {/* Analytics Trends & Verification Funnel */}
