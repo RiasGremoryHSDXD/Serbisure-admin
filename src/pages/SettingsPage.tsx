@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Building2, 
   KeyRound, 
@@ -14,7 +14,8 @@ import {
   UserCheck, 
   X,
   Shield,
-  Save
+  Save,
+  Search
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAdmin } from '../context/AdminContext';
@@ -67,7 +68,7 @@ function formatPhilippineMobile(input: string): string {
 }
 
 export const SettingsPage: React.FC = () => {
-  const { currentRole, currentUser, selectedBarangay, barangays, addBarangay, verifications } = useAdmin();
+  const { currentRole, currentUser, selectedBarangay, barangays, userBarangays, users, addBarangay, verifications } = useAdmin();
 
   // ---------------------------------------------------------
   // Change Password Form State (Shared for Superadmin & Admin)
@@ -348,39 +349,171 @@ export const SettingsPage: React.FC = () => {
     }
   }, [isSuperAdmin]);
 
-  const getBarangayRowStats = (b: BarangayStats) => {
-    const key = b.name.toLowerCase();
-    const live = liveBarangayStats[key];
+  // ---------------------------------------------------------
+  // Barangay Directory Table State (Coverage, Filter & Pagination)
+  // ---------------------------------------------------------
+  const [directorySearch, setDirectorySearch] = useState('');
+  const [directoryFilter, setDirectoryFilter] = useState<'ALL' | 'ACTIVE' | 'NEEDS_ACCOUNT'>('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5;
 
-    // Source of truth: Derive verification breakdown directly from the Verification Queue
-    const cleanName = b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+  // Set of active official LGU names (lowercased)
+  const activeLguMap = useMemo(() => {
+    const set = new Set<string>();
+    (barangays || []).forEach((b) => {
+      const clean = b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+      if (clean) set.add(clean);
+    });
+    return set;
+  }, [barangays]);
+
+  // Combined directory: All barangays with active LGU OR with registered citizens
+  const allDirectoryItems = useMemo(() => {
+    const namesMap = new Map<string, { name: string; rawStat?: BarangayStats }>();
+
+    // 1. Add official LGUs
+    (barangays || []).forEach((b) => {
+      const clean = b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+      if (clean) {
+        namesMap.set(clean.toLowerCase(), { name: clean, rawStat: b });
+      }
+    });
+
+    // 2. Add user barangays where citizens are registered
+    (userBarangays || []).forEach((name) => {
+      const clean = name.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+      if (clean && clean.toLowerCase() !== 'unassigned' && !namesMap.has(clean.toLowerCase())) {
+        namesMap.set(clean.toLowerCase(), { name: clean });
+      }
+    });
+
+    // 3. Fallback check across registered users
+    (users || []).forEach((u) => {
+      if (u.barangay) {
+        const clean = u.barangay.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+        if (clean && clean.toLowerCase() !== 'unassigned' && !namesMap.has(clean.toLowerCase())) {
+          namesMap.set(clean.toLowerCase(), { name: clean });
+        }
+      }
+    });
+
+    // Transform and sort: Active LGUs first, then alphabetical
+    return Array.from(namesMap.values())
+      .map(({ name, rawStat }) => {
+        const hasLguAccount = activeLguMap.has(name.toLowerCase());
+        return {
+          name,
+          hasLguAccount,
+          rawStat,
+        };
+      })
+      .sort((a, b) => {
+        if (a.hasLguAccount !== b.hasLguAccount) {
+          return a.hasLguAccount ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+  }, [barangays, userBarangays, users, activeLguMap]);
+
+  // Filtered items based on status tab and search query
+  const filteredDirectoryItems = useMemo(() => {
+    return allDirectoryItems.filter((item) => {
+      if (directoryFilter === 'ACTIVE' && !item.hasLguAccount) return false;
+      if (directoryFilter === 'NEEDS_ACCOUNT' && item.hasLguAccount) return false;
+
+      if (directorySearch.trim()) {
+        const q = directorySearch.trim().toLowerCase();
+        if (!item.name.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allDirectoryItems, directoryFilter, directorySearch]);
+
+  // Pagination calculation
+  const totalItems = filteredDirectoryItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const validPage = Math.min(currentPage, totalPages);
+  const startIndex = (validPage - 1) * pageSize;
+  const paginatedItems = filteredDirectoryItems.slice(startIndex, startIndex + pageSize);
+
+  // Executive counts
+  const totalActiveLgus = useMemo(() => allDirectoryItems.filter((i) => i.hasLguAccount).length, [allDirectoryItems]);
+  const totalNeedsSetup = useMemo(() => allDirectoryItems.filter((i) => !i.hasLguAccount).length, [allDirectoryItems]);
+
+  const handleQuickSetupLgu = (bgyName: string) => {
+    setAddBrgyError(null);
+    const clean = bgyName.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+    const match = barangaysList.find(
+      (b) => b.name.toLowerCase() === clean.toLowerCase() || (b.displayName && b.displayName.toLowerCase() === clean.toLowerCase())
+    );
+
+    setAddBrgyForm((prev) => ({
+      ...prev,
+      regionCode: '100000000',
+      regionName: 'Region X - Northern Mindanao',
+      provinceCode: '104300000',
+      provinceName: 'Misamis Oriental',
+      cityCode: '104305000',
+      cityName: 'City of Cagayan De Oro',
+      barangayName: match ? match.name : '__custom__',
+      customBarangayName: match ? '' : clean,
+      street: '',
+      contactNumber: '',
+    }));
+    setShowAddBarangay(true);
+  };
+
+  const getBarangayRowStats = (bName: string, rawStat?: BarangayStats) => {
+    const cleanName = bName.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+    const live = liveBarangayStats[cleanName];
+
+    // Source 1: Registered users (Kasambahay + Homeowners)
+    const bUsers = (users || []).filter((u) => {
+      const uBgy = (u.barangay || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+      return uBgy === cleanName || uBgy.includes(cleanName) || cleanName.includes(uBgy);
+    });
+
+    // Source 2: Verification queue
     const allQueue = queueVerifications.length > 0 ? queueVerifications : verifications;
-
     const bVerifs = allQueue.filter((v) => {
       const vBgy = (v.barangay || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
       return vBgy === cleanName || vBgy.includes(cleanName) || cleanName.includes(vBgy);
     });
 
+    const hasUserData = bUsers.length > 0;
     const hasQueueData = bVerifs.length > 0;
+
+    const totalRegistered = hasUserData
+      ? bUsers.length
+      : (hasQueueData ? bVerifs.length : (live?.totalRegistered ?? rawStat?.totalRegistered ?? 0));
+
     const pending = hasQueueData
       ? bVerifs.filter((v) => v.status === 'PENDING / REVIEW').length
-      : (live?.pending ?? b.pending ?? 0);
+      : (hasUserData ? bUsers.filter((u) => u.status === 'PENDING' && !u.verified).length : (live?.pending ?? rawStat?.pending ?? 0));
+
     const verified = hasQueueData
       ? bVerifs.filter((v) => v.status === 'VERIFIED').length
-      : (live?.verified ?? b.verified ?? 0);
+      : (hasUserData ? bUsers.filter((u) => u.verified).length : (live?.verified ?? rawStat?.verified ?? 0));
+
     const rejected = hasQueueData
       ? bVerifs.filter((v) => v.status === 'REJECTED').length
-      : (live?.rejected ?? b.rejected ?? 0);
+      : (live?.rejected ?? rawStat?.rejected ?? 0);
+
     const noDocuments = hasQueueData
       ? bVerifs.filter((v) => v.status === 'NO_DOCUMENTS').length
-      : (live?.noDocuments ?? b.noDocuments ?? 0);
-    const totalRegistered = hasQueueData
-      ? bVerifs.length
-      : (live?.totalRegistered ?? b.totalRegistered ?? 0);
+      : (hasUserData ? bUsers.filter((u) => !u.verified && u.status !== 'PENDING').length : (live?.noDocuments ?? rawStat?.noDocuments ?? 0));
 
-    const employed = live?.employed ?? b.employed ?? 0;
-    const available = live?.available ?? b.available ?? 0;
-    const employmentRatio = live?.employmentRatio ?? b.employmentRatio ?? 0;
+    // Kasambahay employment breakdown
+    const kasambahayUsers = bUsers.filter((u) => u.role === 'KASAMBAHAY');
+    const employed = live?.employed ?? rawStat?.employed ?? 0;
+    const available = kasambahayUsers.length > 0
+      ? Math.max(0, kasambahayUsers.length - employed)
+      : (live?.available ?? rawStat?.available ?? 0);
+
+    const totalKasambahay = kasambahayUsers.length > 0 ? kasambahayUsers.length : (employed + available);
+    const employmentRatio = totalKasambahay > 0
+      ? Math.round((employed / totalKasambahay) * 100)
+      : (live?.employmentRatio ?? rawStat?.employmentRatio ?? 0);
 
     return {
       totalRegistered,
@@ -588,19 +721,24 @@ export const SettingsPage: React.FC = () => {
       {/* ========================================================= */}
 
       {isSuperAdmin ? (
-        /* ---------------- SUPERADMIN: BARANGAY DIRECTORY ---------------- */
+        /* ---------------- SUPERADMIN: BARANGAY DIRECTORY & COVERAGE ---------------- */
         <div className="bg-white rounded-3xl p-8 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 text-[#0D0D11] font-black font-display text-base">
+              <div className="flex flex-wrap items-center gap-2 text-[#0D0D11] font-black font-display text-base">
                 <Building2 className="w-5 h-5 text-[#FFB380]" />
-                <span>Barangay Directory</span>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">
-                  {barangays.length} LGUs
+                <span>Barangay Directory & Coverage</span>
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {totalActiveLgus} Active {totalActiveLgus === 1 ? 'LGU' : 'LGUs'}
                 </span>
+                {totalNeedsSetup > 0 && (
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                    {totalNeedsSetup} Needs LGU Setup
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-zinc-400 font-medium mt-0.5">
-                Configured administrative jurisdictions across Cagayan de Oro City
+              <p className="text-xs text-zinc-400 font-medium mt-1">
+                Monitors registered citizens and administrative coverage across Cagayan de Oro City barangays.
               </p>
             </div>
 
@@ -618,11 +756,75 @@ export const SettingsPage: React.FC = () => {
                 }));
                 setShowAddBarangay(true);
               }}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full bg-[#0D0D11] hover:bg-black text-white text-xs font-black font-display tracking-wide cursor-pointer transition shadow-sm"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full bg-[#0D0D11] hover:bg-black text-white text-xs font-black font-display tracking-wide cursor-pointer transition shadow-sm shrink-0"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 text-[#FFB380]" />
               <span>Add Barangay</span>
             </button>
+          </div>
+
+          {/* Filter Tabs & Search Controls */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <div className="flex items-center gap-1.5 p-1 bg-zinc-100/80 rounded-xl w-fit">
+              <button
+                type="button"
+                onClick={() => {
+                  setDirectoryFilter('ALL');
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-display transition cursor-pointer ${
+                  directoryFilter === 'ALL'
+                    ? 'bg-white text-zinc-900 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                All ({allDirectoryItems.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDirectoryFilter('ACTIVE');
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-display transition cursor-pointer flex items-center gap-1.5 ${
+                  directoryFilter === 'ACTIVE'
+                    ? 'bg-white text-emerald-700 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Active LGUs ({totalActiveLgus})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDirectoryFilter('NEEDS_ACCOUNT');
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-display transition cursor-pointer flex items-center gap-1.5 ${
+                  directoryFilter === 'NEEDS_ACCOUNT'
+                    ? 'bg-white text-amber-800 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                Needs Account ({totalNeedsSetup})
+              </button>
+            </div>
+
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                value={directorySearch}
+                onChange={(e) => {
+                  setDirectorySearch(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Search barangay..."
+                className="w-full pl-9 pr-4 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#FFB380]/40 font-medium transition"
+              />
+              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
 
           {/* Directory Table */}
@@ -631,30 +833,47 @@ export const SettingsPage: React.FC = () => {
               <thead>
                 <tr className="bg-zinc-50/80 text-[11px] font-black uppercase tracking-wider text-zinc-400 font-display border-b border-zinc-100">
                   <th className="py-3 px-4">Barangay Name</th>
-                  <th className="py-3 px-3 text-center">Total Registered</th>
+                  <th className="py-3 px-3 text-center">LGU Account</th>
+                  <th className="py-3 px-3 text-center">Total Citizens</th>
                   <th className="py-3 px-3 text-center">Pending</th>
                   <th className="py-3 px-3 text-center">Verified</th>
                   <th className="py-3 px-3 text-center">Rejected</th>
-                  <th className="py-3 px-3 text-center">No Documents</th>
+                  <th className="py-3 px-3 text-center">No Docs</th>
                   <th className="py-3 px-3 text-center">Employed</th>
                   <th className="py-3 px-3 text-center">Available</th>
-                  <th className="py-3 px-4 text-right">Employment Rate</th>
+                  <th className="py-3 px-3 text-center">Employment Rate</th>
+                  <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {barangays.length === 0 ? (
+                {paginatedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-zinc-400 font-medium">
-                      No barangays registered yet. Click &quot;Add Barangay&quot; to create one.
+                    <td colSpan={11} className="py-12 text-center text-zinc-400 font-medium">
+                      {directorySearch
+                        ? `No barangays found matching "${directorySearch}".`
+                        : 'No barangays registered yet. Click "+ Add Barangay" to create one.'}
                     </td>
                   </tr>
                 ) : (
-                  barangays.map((b) => {
-                    const rowStats = getBarangayRowStats(b);
+                  paginatedItems.map((item) => {
+                    const rowStats = getBarangayRowStats(item.name, item.rawStat);
                     return (
-                      <tr key={b.name} className="hover:bg-zinc-50/50 transition">
+                      <tr key={item.name} className="hover:bg-zinc-50/50 transition">
                         <td className="py-3.5 px-4 font-bold font-display text-zinc-900">
-                          Brgy. {b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim()}
+                          Brgy. {item.name}
+                        </td>
+                        <td className="py-3.5 px-3 text-center">
+                          {item.hasLguAccount ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              Active LGU
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                              No Account
+                            </span>
+                          )}
                         </td>
                         <td className="py-3.5 px-3 text-center font-bold text-zinc-900">
                           {rowStats.totalRegistered}
@@ -677,10 +896,27 @@ export const SettingsPage: React.FC = () => {
                         <td className="py-3.5 px-3 text-center font-semibold text-zinc-700">
                           {rowStats.available}
                         </td>
-                        <td className="py-3.5 px-4 text-right">
+                        <td className="py-3.5 px-3 text-center">
                           <span className="font-black font-display text-zinc-900">
                             {rowStats.employmentRatio}%
                           </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          {item.hasLguAccount ? (
+                            <span className="text-[11px] font-semibold text-zinc-400">
+                              Configured
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleQuickSetupLgu(item.name)}
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#0D0D11] hover:bg-black text-white text-[11px] font-bold font-display cursor-pointer transition shadow-sm hover:scale-[1.02]"
+                              title={`Create official LGU account for Brgy. ${item.name}`}
+                            >
+                              <Plus className="w-3 h-3 text-[#FFB380]" />
+                              <span>Setup LGU</span>
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -689,6 +925,49 @@ export const SettingsPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-zinc-100 text-xs">
+              <span className="text-zinc-500 font-medium">
+                Showing <span className="font-bold text-zinc-900">{startIndex + 1}</span> to{' '}
+                <span className="font-bold text-zinc-900">{Math.min(startIndex + pageSize, totalItems)}</span> of{' '}
+                <span className="font-bold text-zinc-900">{totalItems}</span> barangays
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={validPage === 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1.5 rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-50 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition text-xs"
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center transition cursor-pointer text-xs ${
+                      validPage === page
+                        ? 'bg-[#0D0D11] text-white shadow-sm'
+                        : 'border border-zinc-200 text-zinc-700 hover:bg-zinc-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={validPage === totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-3 py-1.5 rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-50 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition text-xs"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         /* ---------------- ADMIN: BARANGAY DESK PROFILE ---------------- */
