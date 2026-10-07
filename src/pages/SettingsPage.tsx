@@ -725,17 +725,9 @@ export const SettingsPage: React.FC = () => {
         <div className="bg-white rounded-3xl p-8 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="flex flex-wrap items-center gap-2 text-[#0D0D11] font-black font-display text-base">
+              <div className="flex items-center gap-2 text-[#0D0D11] font-black font-display text-base">
                 <Building2 className="w-5 h-5 text-[#FFB380]" />
                 <span>Barangay Directory & Coverage</span>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {totalActiveLgus} Active {totalActiveLgus === 1 ? 'LGU' : 'LGUs'}
-                </span>
-                {totalNeedsSetup > 0 && (
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                    {totalNeedsSetup} Needs LGU Setup
-                  </span>
-                )}
               </div>
               <p className="text-xs text-zinc-400 font-medium mt-1">
                 Monitors registered citizens and administrative coverage across Cagayan de Oro City barangays.
@@ -765,16 +757,16 @@ export const SettingsPage: React.FC = () => {
 
           {/* Filter Tabs & Search Controls */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-            <div className="flex items-center gap-1.5 p-1 bg-zinc-100/80 rounded-xl w-fit">
+            <div className="flex items-center gap-1 p-1 bg-[#F0F0EC] rounded-full w-fit">
               <button
                 type="button"
                 onClick={() => {
                   setDirectoryFilter('ALL');
                   setCurrentPage(1);
                 }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-display transition cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold font-display transition cursor-pointer ${
                   directoryFilter === 'ALL'
-                    ? 'bg-white text-zinc-900 shadow-sm'
+                    ? 'bg-white text-zinc-900 shadow-xs'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
@@ -786,9 +778,9 @@ export const SettingsPage: React.FC = () => {
                   setDirectoryFilter('ACTIVE');
                   setCurrentPage(1);
                 }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-display transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold font-display transition cursor-pointer flex items-center gap-1.5 ${
                   directoryFilter === 'ACTIVE'
-                    ? 'bg-white text-emerald-700 shadow-sm'
+                    ? 'bg-white text-zinc-900 shadow-xs'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
@@ -801,13 +793,13 @@ export const SettingsPage: React.FC = () => {
                   setDirectoryFilter('NEEDS_ACCOUNT');
                   setCurrentPage(1);
                 }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-display transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold font-display transition cursor-pointer flex items-center gap-1.5 ${
                   directoryFilter === 'NEEDS_ACCOUNT'
-                    ? 'bg-white text-amber-800 shadow-sm'
+                    ? 'bg-white text-zinc-900 shadow-xs'
                     : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
                 Needs Account ({totalNeedsSetup})
               </button>
             </div>
@@ -862,17 +854,23 @@ export const SettingsPage: React.FC = () => {
                         <td className="py-3.5 px-4 font-bold font-display text-zinc-900">
                           Brgy. {item.name}
                         </td>
-                        <td className="py-3.5 px-3 text-center">
+                        <td className="py-3.5 px-3 text-center whitespace-nowrap">
                           {item.hasLguAccount ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                              Active LGU
-                            </span>
+                            <div 
+                              className="inline-flex items-center justify-center gap-1.5"
+                              title={`Official LGU account configured for Brgy. ${item.name}`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span className="text-xs font-semibold text-zinc-900">Active LGU</span>
+                            </div>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                              <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
-                              No Account
-                            </span>
+                            <div 
+                              className="inline-flex items-center justify-center gap-1.5"
+                              title={`No administrative desk account registered for Brgy. ${item.name}`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 shrink-0" />
+                              <span className="text-xs font-medium text-zinc-400">No Account</span>
+                            </div>
                           )}
                         </td>
                         <td className="py-3.5 px-3 text-center font-bold text-zinc-900">
