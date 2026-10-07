@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Building2, 
   KeyRound, 
@@ -14,7 +14,9 @@ import {
   UserCheck, 
   X,
   Shield,
-  Save
+  Save,
+  Search,
+  Lock
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAdmin } from '../context/AdminContext';
@@ -67,7 +69,7 @@ function formatPhilippineMobile(input: string): string {
 }
 
 export const SettingsPage: React.FC = () => {
-  const { currentRole, currentUser, selectedBarangay, barangays, addBarangay, verifications } = useAdmin();
+  const { currentRole, currentUser, selectedBarangay, barangays, userBarangays, users, addBarangay, verifications } = useAdmin();
 
   // ---------------------------------------------------------
   // Change Password Form State (Shared for Superadmin & Admin)
@@ -161,7 +163,6 @@ export const SettingsPage: React.FC = () => {
     cityCode: '104305000',
     cityName: 'City of Cagayan De Oro',
     barangayName: '',
-    customBarangayName: '',
     street: '',
     contactNumber: '',
     zipcode: '9000',
@@ -169,6 +170,7 @@ export const SettingsPage: React.FC = () => {
   });
   const [addBrgyError, setAddBrgyError] = useState<string | null>(null);
   const [isSubmittingBrgy, setIsSubmittingBrgy] = useState(false);
+  const [lockedQuickSetupBarangay, setLockedQuickSetupBarangay] = useState<string | null>(null);
 
   // PSGC Location Dropdown Lists
   const [regionsList, setRegionsList] = useState<Region[]>([]);
@@ -247,7 +249,6 @@ export const SettingsPage: React.FC = () => {
         cityCode: cityCode,
         cityName: cityName,
         barangayName: '',
-        customBarangayName: '',
         zipcode: zip,
       }));
     } finally {
@@ -283,7 +284,6 @@ export const SettingsPage: React.FC = () => {
         cityCode: cityCode,
         cityName: cityName,
         barangayName: '',
-        customBarangayName: '',
         zipcode: zip,
       }));
     } finally {
@@ -307,7 +307,6 @@ export const SettingsPage: React.FC = () => {
         cityCode: cityCode,
         cityName: cityName,
         barangayName: '',
-        customBarangayName: '',
         zipcode: zip,
       }));
     } finally {
@@ -348,39 +347,184 @@ export const SettingsPage: React.FC = () => {
     }
   }, [isSuperAdmin]);
 
-  const getBarangayRowStats = (b: BarangayStats) => {
-    const key = b.name.toLowerCase();
-    const live = liveBarangayStats[key];
+  // ---------------------------------------------------------
+  // Barangay Directory Table State (Coverage, Filter & Pagination)
+  // ---------------------------------------------------------
+  const [directorySearch, setDirectorySearch] = useState('');
+  const [directoryFilter, setDirectoryFilter] = useState<'ALL' | 'ACTIVE' | 'NEEDS_ACCOUNT'>('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5;
 
-    // Source of truth: Derive verification breakdown directly from the Verification Queue
-    const cleanName = b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+  // Set of active official LGU names (lowercased)
+  const activeLguMap = useMemo(() => {
+    const set = new Set<string>();
+    (barangays || []).forEach((b) => {
+      const clean = b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+      if (clean) set.add(clean);
+    });
+    return set;
+  }, [barangays]);
+
+  // Combined directory: All barangays with active LGU OR with registered citizens
+  const allDirectoryItems = useMemo(() => {
+    const namesMap = new Map<string, { name: string; rawStat?: BarangayStats }>();
+
+    // 1. Add official LGUs
+    (barangays || []).forEach((b) => {
+      const clean = b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+      if (clean) {
+        namesMap.set(clean.toLowerCase(), { name: clean, rawStat: b });
+      }
+    });
+
+    // 2. Add user barangays where citizens are registered
+    (userBarangays || []).forEach((name) => {
+      const clean = name.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+      if (clean && clean.toLowerCase() !== 'unassigned' && !namesMap.has(clean.toLowerCase())) {
+        namesMap.set(clean.toLowerCase(), { name: clean });
+      }
+    });
+
+    // 3. Fallback check across registered users
+    (users || []).forEach((u) => {
+      if (u.barangay) {
+        const clean = u.barangay.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+        if (clean && clean.toLowerCase() !== 'unassigned' && !namesMap.has(clean.toLowerCase())) {
+          namesMap.set(clean.toLowerCase(), { name: clean });
+        }
+      }
+    });
+
+    // Transform and sort: Active LGUs first, then alphabetical
+    return Array.from(namesMap.values())
+      .map(({ name, rawStat }) => {
+        const hasLguAccount = activeLguMap.has(name.toLowerCase());
+        return {
+          name,
+          hasLguAccount,
+          rawStat,
+        };
+      })
+      .sort((a, b) => {
+        if (a.hasLguAccount !== b.hasLguAccount) {
+          return a.hasLguAccount ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+  }, [barangays, userBarangays, users, activeLguMap]);
+
+  // Filtered items based on status tab and search query
+  const filteredDirectoryItems = useMemo(() => {
+    return allDirectoryItems.filter((item) => {
+      if (directoryFilter === 'ACTIVE' && !item.hasLguAccount) return false;
+      if (directoryFilter === 'NEEDS_ACCOUNT' && item.hasLguAccount) return false;
+
+      if (directorySearch.trim()) {
+        const q = directorySearch.trim().toLowerCase();
+        if (!item.name.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [allDirectoryItems, directoryFilter, directorySearch]);
+
+  // Pagination calculation
+  const totalItems = filteredDirectoryItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const validPage = Math.min(currentPage, totalPages);
+  const startIndex = (validPage - 1) * pageSize;
+  const paginatedItems = filteredDirectoryItems.slice(startIndex, startIndex + pageSize);
+
+  // Executive counts
+  const totalActiveLgus = useMemo(() => allDirectoryItems.filter((i) => i.hasLguAccount).length, [allDirectoryItems]);
+  const totalNeedsSetup = useMemo(() => allDirectoryItems.filter((i) => !i.hasLguAccount).length, [allDirectoryItems]);
+
+  const handleQuickSetupLgu = async (bgyName: string) => {
+    setAddBrgyError(null);
+    const clean = bgyName.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
+
+    let currentBrgys = barangaysList;
+    if (currentBrgys.length === 0) {
+      try {
+        currentBrgys = await getBarangays('104305000');
+        setBarangaysList(currentBrgys);
+      } catch {
+        // preserve current list
+      }
+    }
+
+    const match = currentBrgys.find(
+      (b) => b.name.toLowerCase() === clean.toLowerCase() || (b.displayName && b.displayName.toLowerCase() === clean.toLowerCase())
+    );
+
+    setLockedQuickSetupBarangay(clean);
+    setAddBrgyForm((prev) => ({
+      ...prev,
+      regionCode: '100000000',
+      regionName: 'Region X - Northern Mindanao',
+      provinceCode: '104300000',
+      provinceName: 'Misamis Oriental',
+      cityCode: '104305000',
+      cityName: 'City of Cagayan De Oro',
+      barangayName: match ? match.name : clean,
+      street: '',
+      contactNumber: '',
+      zipcode: '9000',
+      country: 'Philippines',
+    }));
+    setShowAddBarangay(true);
+  };
+
+  const getBarangayRowStats = (bName: string, rawStat?: BarangayStats) => {
+    const cleanName = bName.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+    const live = liveBarangayStats[cleanName];
+
+    // Source 1: Registered users (Kasambahay + Homeowners)
+    const bUsers = (users || []).filter((u) => {
+      const uBgy = (u.barangay || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
+      return uBgy === cleanName || uBgy.includes(cleanName) || cleanName.includes(uBgy);
+    });
+
+    // Source 2: Verification queue
     const allQueue = queueVerifications.length > 0 ? queueVerifications : verifications;
-
     const bVerifs = allQueue.filter((v) => {
       const vBgy = (v.barangay || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
       return vBgy === cleanName || vBgy.includes(cleanName) || cleanName.includes(vBgy);
     });
 
+    const hasUserData = bUsers.length > 0;
     const hasQueueData = bVerifs.length > 0;
+
+    const totalRegistered = hasUserData
+      ? bUsers.length
+      : (hasQueueData ? bVerifs.length : (live?.totalRegistered ?? rawStat?.totalRegistered ?? 0));
+
     const pending = hasQueueData
       ? bVerifs.filter((v) => v.status === 'PENDING / REVIEW').length
-      : (live?.pending ?? b.pending ?? 0);
+      : (hasUserData ? bUsers.filter((u) => u.status === 'PENDING' && !u.verified).length : (live?.pending ?? rawStat?.pending ?? 0));
+
     const verified = hasQueueData
       ? bVerifs.filter((v) => v.status === 'VERIFIED').length
-      : (live?.verified ?? b.verified ?? 0);
+      : (hasUserData ? bUsers.filter((u) => u.verified).length : (live?.verified ?? rawStat?.verified ?? 0));
+
     const rejected = hasQueueData
       ? bVerifs.filter((v) => v.status === 'REJECTED').length
-      : (live?.rejected ?? b.rejected ?? 0);
+      : (live?.rejected ?? rawStat?.rejected ?? 0);
+
     const noDocuments = hasQueueData
       ? bVerifs.filter((v) => v.status === 'NO_DOCUMENTS').length
-      : (live?.noDocuments ?? b.noDocuments ?? 0);
-    const totalRegistered = hasQueueData
-      ? bVerifs.length
-      : (live?.totalRegistered ?? b.totalRegistered ?? 0);
+      : (hasUserData ? bUsers.filter((u) => !u.verified && u.status !== 'PENDING').length : (live?.noDocuments ?? rawStat?.noDocuments ?? 0));
 
-    const employed = live?.employed ?? b.employed ?? 0;
-    const available = live?.available ?? b.available ?? 0;
-    const employmentRatio = live?.employmentRatio ?? b.employmentRatio ?? 0;
+    // Kasambahay employment breakdown
+    const kasambahayUsers = bUsers.filter((u) => u.role === 'KASAMBAHAY');
+    const employed = live?.employed ?? rawStat?.employed ?? 0;
+    const available = kasambahayUsers.length > 0
+      ? Math.max(0, kasambahayUsers.length - employed)
+      : (live?.available ?? rawStat?.available ?? 0);
+
+    const totalKasambahay = kasambahayUsers.length > 0 ? kasambahayUsers.length : (employed + available);
+    const employmentRatio = totalKasambahay > 0
+      ? Math.round((employed / totalKasambahay) * 100)
+      : (live?.employmentRatio ?? rawStat?.employmentRatio ?? 0);
 
     return {
       totalRegistered,
@@ -485,9 +629,7 @@ export const SettingsPage: React.FC = () => {
 
   const handleAddBarangaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const rawName = addBrgyForm.barangayName === '__custom__'
-      ? addBrgyForm.customBarangayName.trim()
-      : addBrgyForm.barangayName.trim();
+    const rawName = addBrgyForm.barangayName.trim();
 
     if (!rawName) {
       setAddBrgyError('Please select a Barangay from the dropdown list.');
@@ -544,10 +686,10 @@ export const SettingsPage: React.FC = () => {
       setAddBrgyForm((prev) => ({
         ...prev,
         barangayName: '',
-        customBarangayName: '',
         street: '',
         contactNumber: '',
       }));
+      setLockedQuickSetupBarangay(null);
       setShowAddBarangay(false);
     } catch (err: unknown) {
       setAddBrgyError(sanitizeUserFriendlyError(err instanceof Error ? err.message : 'Failed to register barangay in database.'));
@@ -588,19 +730,16 @@ export const SettingsPage: React.FC = () => {
       {/* ========================================================= */}
 
       {isSuperAdmin ? (
-        /* ---------------- SUPERADMIN: BARANGAY DIRECTORY ---------------- */
+        /* ---------------- SUPERADMIN: BARANGAY DIRECTORY & COVERAGE ---------------- */
         <div className="bg-white rounded-3xl p-8 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-[#0D0D11] font-black font-display text-base">
                 <Building2 className="w-5 h-5 text-[#FFB380]" />
-                <span>Barangay Directory</span>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">
-                  {barangays.length} LGUs
-                </span>
+                <span>Barangay Directory & Coverage</span>
               </div>
-              <p className="text-xs text-zinc-400 font-medium mt-0.5">
-                Configured administrative jurisdictions across Cagayan de Oro City
+              <p className="text-xs text-zinc-400 font-medium mt-1">
+                Monitors registered citizens and administrative coverage across Cagayan de Oro City barangays.
               </p>
             </div>
 
@@ -609,20 +748,86 @@ export const SettingsPage: React.FC = () => {
               type="button"
               onClick={() => {
                 setAddBrgyError(null);
+                setLockedQuickSetupBarangay(null);
                 setAddBrgyForm((prev) => ({
                   ...prev,
                   barangayName: '',
-                  customBarangayName: '',
                   street: '',
                   contactNumber: '',
+                  zipcode: '9000',
+                  country: 'Philippines',
                 }));
                 setShowAddBarangay(true);
               }}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full bg-[#0D0D11] hover:bg-black text-white text-xs font-black font-display tracking-wide cursor-pointer transition shadow-sm"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full bg-[#0D0D11] hover:bg-black text-white text-xs font-black font-display tracking-wide cursor-pointer transition shadow-sm shrink-0"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 text-[#FFB380]" />
               <span>Add Barangay</span>
             </button>
+          </div>
+
+          {/* Filter Tabs & Search Controls */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <div className="flex items-center gap-1 p-1 bg-[#F0F0EC] rounded-full w-fit">
+              <button
+                type="button"
+                onClick={() => {
+                  setDirectoryFilter('ALL');
+                  setCurrentPage(1);
+                }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold font-display transition cursor-pointer ${
+                  directoryFilter === 'ALL'
+                    ? 'bg-white text-zinc-900 shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                All ({allDirectoryItems.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDirectoryFilter('ACTIVE');
+                  setCurrentPage(1);
+                }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold font-display transition cursor-pointer flex items-center gap-1.5 ${
+                  directoryFilter === 'ACTIVE'
+                    ? 'bg-white text-zinc-900 shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Active LGUs ({totalActiveLgus})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDirectoryFilter('NEEDS_ACCOUNT');
+                  setCurrentPage(1);
+                }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold font-display transition cursor-pointer flex items-center gap-1.5 ${
+                  directoryFilter === 'NEEDS_ACCOUNT'
+                    ? 'bg-white text-zinc-900 shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+                Needs Account ({totalNeedsSetup})
+              </button>
+            </div>
+
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                value={directorySearch}
+                onChange={(e) => {
+                  setDirectorySearch(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Search barangay..."
+                className="w-full pl-9 pr-4 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#FFB380]/40 font-medium transition"
+              />
+              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
 
           {/* Directory Table */}
@@ -631,30 +836,53 @@ export const SettingsPage: React.FC = () => {
               <thead>
                 <tr className="bg-zinc-50/80 text-[11px] font-black uppercase tracking-wider text-zinc-400 font-display border-b border-zinc-100">
                   <th className="py-3 px-4">Barangay Name</th>
-                  <th className="py-3 px-3 text-center">Total Registered</th>
+                  <th className="py-3 px-3 text-center">LGU Account</th>
+                  <th className="py-3 px-3 text-center">Total Citizens</th>
                   <th className="py-3 px-3 text-center">Pending</th>
                   <th className="py-3 px-3 text-center">Verified</th>
                   <th className="py-3 px-3 text-center">Rejected</th>
-                  <th className="py-3 px-3 text-center">No Documents</th>
+                  <th className="py-3 px-3 text-center">No Docs</th>
                   <th className="py-3 px-3 text-center">Employed</th>
                   <th className="py-3 px-3 text-center">Available</th>
-                  <th className="py-3 px-4 text-right">Employment Rate</th>
+                  <th className="py-3 px-3 text-center">Employment Rate</th>
+                  <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {barangays.length === 0 ? (
+                {paginatedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-zinc-400 font-medium">
-                      No barangays registered yet. Click &quot;Add Barangay&quot; to create one.
+                    <td colSpan={11} className="py-12 text-center text-zinc-400 font-medium">
+                      {directorySearch
+                        ? `No barangays found matching "${directorySearch}".`
+                        : 'No barangays registered yet. Click "+ Add Barangay" to create one.'}
                     </td>
                   </tr>
                 ) : (
-                  barangays.map((b) => {
-                    const rowStats = getBarangayRowStats(b);
+                  paginatedItems.map((item) => {
+                    const rowStats = getBarangayRowStats(item.name, item.rawStat);
                     return (
-                      <tr key={b.name} className="hover:bg-zinc-50/50 transition">
+                      <tr key={item.name} className="hover:bg-zinc-50/50 transition">
                         <td className="py-3.5 px-4 font-bold font-display text-zinc-900">
-                          Brgy. {b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim()}
+                          Brgy. {item.name}
+                        </td>
+                        <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                          {item.hasLguAccount ? (
+                            <div 
+                              className="inline-flex items-center justify-center gap-1.5"
+                              title={`Official LGU account configured for Brgy. ${item.name}`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span className="text-xs font-semibold text-zinc-900">Active LGU</span>
+                            </div>
+                          ) : (
+                            <div 
+                              className="inline-flex items-center justify-center gap-1.5"
+                              title={`No administrative desk account registered for Brgy. ${item.name}`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 shrink-0" />
+                              <span className="text-xs font-medium text-zinc-400">No Account</span>
+                            </div>
+                          )}
                         </td>
                         <td className="py-3.5 px-3 text-center font-bold text-zinc-900">
                           {rowStats.totalRegistered}
@@ -677,10 +905,27 @@ export const SettingsPage: React.FC = () => {
                         <td className="py-3.5 px-3 text-center font-semibold text-zinc-700">
                           {rowStats.available}
                         </td>
-                        <td className="py-3.5 px-4 text-right">
+                        <td className="py-3.5 px-3 text-center">
                           <span className="font-black font-display text-zinc-900">
                             {rowStats.employmentRatio}%
                           </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          {item.hasLguAccount ? (
+                            <span className="text-[11px] font-semibold text-zinc-400">
+                              Configured
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleQuickSetupLgu(item.name)}
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#0D0D11] hover:bg-black text-white text-[11px] font-bold font-display cursor-pointer transition shadow-sm hover:scale-[1.02]"
+                              title={`Create official LGU account for Brgy. ${item.name}`}
+                            >
+                              <Plus className="w-3 h-3 text-[#FFB380]" />
+                              <span>Setup LGU</span>
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -689,6 +934,49 @@ export const SettingsPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-zinc-100 text-xs">
+              <span className="text-zinc-500 font-medium">
+                Showing <span className="font-bold text-zinc-900">{startIndex + 1}</span> to{' '}
+                <span className="font-bold text-zinc-900">{Math.min(startIndex + pageSize, totalItems)}</span> of{' '}
+                <span className="font-bold text-zinc-900">{totalItems}</span> barangays
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={validPage === 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1.5 rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-50 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition text-xs"
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center transition cursor-pointer text-xs ${
+                      validPage === page
+                        ? 'bg-[#0D0D11] text-white shadow-sm'
+                        : 'border border-zinc-200 text-zinc-700 hover:bg-zinc-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={validPage === totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-3 py-1.5 rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-50 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition text-xs"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         /* ---------------- ADMIN: BARANGAY DESK PROFILE ---------------- */
@@ -1021,25 +1309,56 @@ export const SettingsPage: React.FC = () => {
             className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Modal Header */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-[#FFB380]" />
-                <h3 className="text-base font-black font-display text-[#0D0D11]">
-                  Add New Barangay
-                </h3>
+              <div className="flex items-center gap-2.5">
+                {lockedQuickSetupBarangay ? (
+                  <div className="w-9 h-9 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                ) : (
+                  <div className="w-9 h-9 rounded-2xl bg-orange-500/10 flex items-center justify-center text-[#FFB380] shrink-0">
+                    <Building2 className="w-4 h-4 text-orange-500" />
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-base font-black font-display text-[#0D0D11]">
+                    {lockedQuickSetupBarangay ? `Setup LGU: Brgy. ${lockedQuickSetupBarangay}` : 'Add New Barangay'}
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 font-medium">
+                    {lockedQuickSetupBarangay
+                      ? 'Configure administrative desk details for this registered community.'
+                      : 'Select from official Philippine Standard Geographic Code (PSGC) places.'}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowAddBarangay(false)}
-                className="text-zinc-400 hover:text-zinc-600 cursor-pointer p-1"
+                onClick={() => {
+                  setShowAddBarangay(false);
+                  setLockedQuickSetupBarangay(null);
+                  setAddBrgyError(null);
+                }}
+                className="text-zinc-400 hover:text-zinc-600 cursor-pointer p-1.5 rounded-xl hover:bg-zinc-100 transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-xs text-zinc-400 font-medium">
-              Select from official Philippine Standard Geographic Code (PSGC) places to avoid typos and preserve data integrity.
-            </p>
+            {/* Jurisdiction Locked Notice */}
+            {lockedQuickSetupBarangay ? (
+              <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+                <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <span className="font-bold">Jurisdiction Locked:</span> Geographic location is locked to{' '}
+                  <strong className="font-black text-amber-950">Brgy. {lockedQuickSetupBarangay}</strong> (Cagayan de Oro, Misamis Oriental) because registered citizens belong to this barangay. Location fields cannot be modified to prevent accidental reassignment.
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-400 font-medium">
+                Select from official Philippine Standard Geographic Code (PSGC) places to avoid typos and preserve data integrity.
+              </p>
+            )}
 
             {addBrgyError && (
               <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
@@ -1051,15 +1370,25 @@ export const SettingsPage: React.FC = () => {
             <form onSubmit={handleAddBarangaySubmit} className="space-y-4">
               {/* Region Select Dropdown */}
               <div>
-                <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                  Region
+                <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                  <span>Region</span>
+                  {lockedQuickSetupBarangay && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                      <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                    </span>
+                  )}
                 </label>
                 <div className="relative">
                   <select
                     value={addBrgyForm.regionCode}
                     onChange={(e) => handleRegionChange(e.target.value)}
-                    disabled={loadingLocations}
-                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8"
+                    disabled={Boolean(lockedQuickSetupBarangay) || loadingLocations}
+                    className={clsx(
+                      "w-full border rounded-2xl px-4 py-2.5 text-xs font-medium appearance-none pr-8 transition",
+                      lockedQuickSetupBarangay
+                        ? "border-zinc-200 bg-zinc-50 text-zinc-600 cursor-not-allowed select-none"
+                        : "border-zinc-200 bg-white text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] cursor-pointer disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                    )}
                   >
                     {regionsList.map((r) => (
                       <option key={r.code} value={r.code}>
@@ -1079,15 +1408,25 @@ export const SettingsPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Province Dropdown */}
                 <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                    Province
+                  <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    <span>Province</span>
+                    {lockedQuickSetupBarangay && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                        <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                      </span>
+                    )}
                   </label>
                   <div className="relative">
                     <select
                       value={addBrgyForm.provinceCode}
                       onChange={(e) => handleProvinceChange(e.target.value)}
-                      disabled={loadingLocations || provincesList.length === 0}
-                      className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8 disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                      disabled={Boolean(lockedQuickSetupBarangay) || loadingLocations || provincesList.length === 0}
+                      className={clsx(
+                        "w-full border rounded-2xl px-4 py-2.5 text-xs font-medium appearance-none pr-8 transition",
+                        lockedQuickSetupBarangay
+                          ? "border-zinc-200 bg-zinc-50 text-zinc-600 cursor-not-allowed select-none"
+                          : "border-zinc-200 bg-white text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] cursor-pointer disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                      )}
                     >
                       {provincesList.map((p) => (
                         <option key={p.code} value={p.code}>
@@ -1105,15 +1444,25 @@ export const SettingsPage: React.FC = () => {
 
                 {/* City / Municipality Dropdown */}
                 <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                    City / Municipality
+                  <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    <span>City / Municipality</span>
+                    {lockedQuickSetupBarangay && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                        <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                      </span>
+                    )}
                   </label>
                   <div className="relative">
                     <select
                       value={addBrgyForm.cityCode}
                       onChange={(e) => handleCityChange(e.target.value)}
-                      disabled={loadingLocations || citiesList.length === 0}
-                      className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8 disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                      disabled={Boolean(lockedQuickSetupBarangay) || loadingLocations || citiesList.length === 0}
+                      className={clsx(
+                        "w-full border rounded-2xl px-4 py-2.5 text-xs font-medium appearance-none pr-8 transition",
+                        lockedQuickSetupBarangay
+                          ? "border-zinc-200 bg-zinc-50 text-zinc-600 cursor-not-allowed select-none"
+                          : "border-zinc-200 bg-white text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] cursor-pointer disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                      )}
                     >
                       {citiesList.map((c) => (
                         <option key={c.code} value={c.code}>
@@ -1132,18 +1481,31 @@ export const SettingsPage: React.FC = () => {
 
               {/* Barangay Dropdown */}
               <div>
-                <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                  Barangay Name <span className="text-red-500">*</span>
+                <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                  <span>
+                    Barangay Name <span className="text-red-500">*</span>
+                  </span>
+                  {lockedQuickSetupBarangay && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                      <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                    </span>
+                  )}
                 </label>
                 <div className="relative">
                   <select
                     value={addBrgyForm.barangayName}
                     onChange={(e) => {
+                      if (lockedQuickSetupBarangay) return;
                       setAddBrgyError(null);
                       setAddBrgyForm({ ...addBrgyForm, barangayName: e.target.value });
                     }}
-                    disabled={loadingLocations || barangaysList.length === 0}
-                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] bg-white cursor-pointer appearance-none pr-8 disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                    disabled={Boolean(lockedQuickSetupBarangay) || loadingLocations || barangaysList.length === 0}
+                    className={clsx(
+                      "w-full border rounded-2xl px-4 py-2.5 text-xs font-medium appearance-none pr-8 transition",
+                      lockedQuickSetupBarangay
+                        ? "border-zinc-200 bg-zinc-50 text-zinc-600 cursor-not-allowed select-none"
+                        : "border-zinc-200 bg-white text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380] cursor-pointer disabled:bg-zinc-50 disabled:cursor-not-allowed"
+                    )}
                   >
                     <option value="">
                       -- Select Barangay {barangaysList.length > 0 ? `(${barangaysList.length} Options)` : ''} --
@@ -1155,12 +1517,21 @@ export const SettingsPage: React.FC = () => {
                         return existingClean === cleanB;
                       });
                       return (
-                        <option key={b.code} value={b.name} disabled={isAlreadyAdded}>
+                        <option
+                          key={b.code}
+                          value={b.name}
+                          disabled={isAlreadyAdded && addBrgyForm.barangayName !== b.name}
+                        >
                           {b.displayName || b.name} {isAlreadyAdded ? '✓ (Already Registered)' : ''}
                         </option>
                       );
                     })}
-                    <option value="__custom__">+ Other / Enter Custom Barangay</option>
+                    {/* In locked setup mode, ensure the target barangay is in the options list if not already present in the PSGC list */}
+                    {lockedQuickSetupBarangay && !barangaysList.some((b) => b.name.toLowerCase() === addBrgyForm.barangayName.toLowerCase()) && (
+                      <option value={addBrgyForm.barangayName}>
+                        {addBrgyForm.barangayName.startsWith('Barangay') || addBrgyForm.barangayName.startsWith('Brgy.') ? addBrgyForm.barangayName : `Brgy. ${addBrgyForm.barangayName}`}
+                      </option>
+                    )}
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400">
                     <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
@@ -1170,27 +1541,6 @@ export const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Custom Barangay Input if '__custom__' selected */}
-              {addBrgyForm.barangayName === '__custom__' && (
-                <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                    Custom Barangay Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={60}
-                    value={addBrgyForm.customBarangayName}
-                    onChange={(e) => {
-                      setAddBrgyError(null);
-                      setAddBrgyForm({ ...addBrgyForm, customBarangayName: e.target.value });
-                    }}
-                    placeholder="e.g. Upper Balulang / Sitio Zone 9"
-                    autoFocus
-                    className="w-full border border-orange-200 bg-orange-50/20 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380]"
-                  />
-                </div>
-              )}
-
               {/* House No. / Street / Zone / Subdivision */}
               <div>
                 <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
@@ -1199,6 +1549,7 @@ export const SettingsPage: React.FC = () => {
                 <input
                   type="text"
                   maxLength={100}
+                  autoFocus={Boolean(lockedQuickSetupBarangay)}
                   value={addBrgyForm.street}
                   onChange={(e) => setAddBrgyForm({ ...addBrgyForm, street: e.target.value })}
                   placeholder="e.g. Zone 1, Purok 3 / Barangay Hall Compound"
@@ -1236,28 +1587,47 @@ export const SettingsPage: React.FC = () => {
               {/* Zip Code and Country Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                    Zip Code
+                  <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    <span>Zip Code</span>
+                    {lockedQuickSetupBarangay && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                        <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                      </span>
+                    )}
                   </label>
                   <input
                     type="text"
                     maxLength={4}
                     value={addBrgyForm.zipcode}
-                    onChange={(e) => setAddBrgyForm({ ...addBrgyForm, zipcode: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                    readOnly={Boolean(lockedQuickSetupBarangay)}
+                    onChange={(e) => {
+                      if (lockedQuickSetupBarangay) return;
+                      setAddBrgyForm({ ...addBrgyForm, zipcode: e.target.value.replace(/\D/g, '').slice(0, 4) });
+                    }}
                     placeholder="e.g. 9000"
-                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-[#0D0D11] focus:outline-none focus:ring-2 focus:ring-[#FFB380]"
+                    className={clsx(
+                      "w-full border rounded-2xl px-4 py-2.5 text-xs font-medium focus:outline-none transition",
+                      lockedQuickSetupBarangay
+                        ? "border-zinc-200 bg-zinc-50 text-zinc-600 cursor-not-allowed select-none"
+                        : "border-zinc-200 text-[#0D0D11] focus:ring-2 focus:ring-[#FFB380]"
+                    )}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
-                    Country
+                  <label className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-500 font-display mb-1.5">
+                    <span>Country</span>
+                    {lockedQuickSetupBarangay && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-medium normal-case">
+                        <Lock className="w-3 h-3 text-zinc-400" /> Locked
+                      </span>
+                    )}
                   </label>
                   <input
                     type="text"
                     value={addBrgyForm.country}
                     readOnly
-                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-zinc-700 bg-zinc-50 cursor-not-allowed focus:outline-none"
+                    className="w-full border border-zinc-200 rounded-2xl px-4 py-2.5 text-xs font-medium text-zinc-600 bg-zinc-50 cursor-not-allowed focus:outline-none select-none"
                   />
                 </div>
               </div>
@@ -1265,7 +1635,11 @@ export const SettingsPage: React.FC = () => {
               <div className="flex items-center justify-end gap-2.5 pt-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddBarangay(false)}
+                  onClick={() => {
+                    setShowAddBarangay(false);
+                    setLockedQuickSetupBarangay(null);
+                    setAddBrgyError(null);
+                  }}
                   className="px-4 py-2 rounded-full bg-[#F0F0EC] hover:bg-[#E5E5E0] text-zinc-700 text-xs font-black font-display cursor-pointer transition"
                 >
                   Cancel
@@ -1282,7 +1656,7 @@ export const SettingsPage: React.FC = () => {
                       <span>Saving to Database...</span>
                     </>
                   ) : (
-                    <span>Add Barangay</span>
+                    <span>{lockedQuickSetupBarangay ? 'Setup LGU Desk' : 'Add Barangay'}</span>
                   )}
                 </button>
               </div>

@@ -97,6 +97,30 @@ export const AUTHORIZED_ADMINS = [
   },
 ];
 
+/**
+ * Completely purges all SerbiSure administrative data, auth tokens,
+ * cached lists, profiles, and sensitive items from localStorage and sessionStorage.
+ */
+export const purgeAdminStorage = () => {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('serbisure_') || key.startsWith('serbisure'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((key) => localStorage.removeItem(key));
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.clear();
+    }
+  } catch (e) {
+    console.error('Failed to purge admin storage:', e);
+  }
+};
+
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
 
 export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -263,18 +287,31 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       console.warn('[Admin Auth] Session expired or revoked. Resetting authentication state.');
       setIsAuthenticated(false);
       setCurrentUser(null);
-      try {
-        localStorage.removeItem('serbisure_admin_auth');
-        localStorage.removeItem('serbisure_admin_user');
-        localStorage.removeItem('serbisure_admin_token');
-      } catch (e) {
-        console.error('Failed to clear expired auth from storage:', e);
-      }
+      setCurrentRole('SUPERADMIN');
+      setSelectedBarangay('All Barangays');
+      setActiveNav('dashboard');
+      setVerifications([]);
+      setSelectedVerificationId('');
+      setUsers([]);
+      setBookings([]);
+      setDashboardMetrics(null);
+      setMonthlyTrend([]);
+      setAuditLogs([]);
+      setBarangays(BARANGAYS_DATA);
+      setUserBarangays([]);
+      purgeAdminStorage();
     };
 
     window.addEventListener('serbisure:auth_expired', handleAuthExpired);
     return () => window.removeEventListener('serbisure:auth_expired', handleAuthExpired);
   }, []);
+
+  // Guarantee that unauthenticated sessions never retain cached admin data in storage
+  useEffect(() => {
+    if (!isAuthenticated) {
+      purgeAdminStorage();
+    }
+  }, [isAuthenticated]);
 
   const setRoleSafely = (role: AdminRole) => {
     // Only superadmin can change or switch roles
@@ -474,13 +511,16 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [currentRole, selectedBarangay]);
 
-  // Fetch LGU and all database resident barangay list on initial load
+  // Fetch LGU and all database resident barangay list once authenticated
   useEffect(() => {
+    if (!isAuthenticated) return;
     refreshLguBarangays();
-  }, [refreshLguBarangays]);
+  }, [isAuthenticated, refreshLguBarangays]);
 
   // Fetch live backend data on initial load, role/barangay change, plus real-time polling
   useEffect(() => {
+    if (!isAuthenticated) return;
+
     refreshVerifications();
     refreshUsers();
     refreshDashboardStats();
@@ -494,7 +534,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, 4000);
 
     return () => clearInterval(interval);
-  }, [refreshVerifications, refreshUsers, refreshDashboardStats, refreshDashboardActivity, refreshMonthlyTrend, refreshAuditLogs]);
+  }, [isAuthenticated, refreshVerifications, refreshUsers, refreshDashboardStats, refreshDashboardActivity, refreshMonthlyTrend, refreshAuditLogs]);
 
   const login = async (
     username: string,
@@ -585,13 +625,19 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const logout = () => {
     setIsAuthenticated(false);
     setCurrentUser(null);
-    try {
-      localStorage.removeItem('serbisure_admin_auth');
-      localStorage.removeItem('serbisure_admin_user');
-      localStorage.removeItem('serbisure_admin_token');
-    } catch (e) {
-      console.error('Failed to clear localStorage:', e);
-    }
+    setCurrentRole('SUPERADMIN');
+    setSelectedBarangay('All Barangays');
+    setActiveNav('dashboard');
+    setVerifications([]);
+    setSelectedVerificationId('');
+    setUsers([]);
+    setBookings([]);
+    setDashboardMetrics(null);
+    setMonthlyTrend([]);
+    setAuditLogs([]);
+    setBarangays(BARANGAYS_DATA);
+    setUserBarangays([]);
+    purgeAdminStorage();
   };
 
   const approveVerification = async (id: string) => {
