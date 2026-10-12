@@ -20,13 +20,11 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAdmin } from '../context/AdminContext';
-import type { BarangayDeskProfile, BarangayStats, VerificationRequest } from '../types/admin';
+import type { BarangayDeskProfile } from '../types/admin';
 import { 
   changePasswordApi, 
   fetchDeskProfileApi, 
   updateDeskProfileApi,
-  fetchDashboardStats,
-  fetchVerificationQueue,
   sanitizeUserFriendlyError
 } from '../api/adminApi';
 import {
@@ -69,7 +67,7 @@ function formatPhilippineMobile(input: string): string {
 }
 
 export const SettingsPage: React.FC = () => {
-  const { currentRole, currentUser, selectedBarangay, barangays, userBarangays, users, addBarangay, verifications } = useAdmin();
+  const { currentRole, currentUser, selectedBarangay, barangays, directoryBarangays, dashboardMetrics, dashboardStatsError, refreshDashboardStats, addBarangay } = useAdmin();
 
   // ---------------------------------------------------------
   // Change Password Form State (Shared for Superadmin & Admin)
@@ -317,35 +315,9 @@ export const SettingsPage: React.FC = () => {
   // ---------------------------------------------------------
   // Live Barangay Metrics (Workforce + Verification Breakdown)
   // ---------------------------------------------------------
-  const [liveBarangayStats, setLiveBarangayStats] = useState<Record<string, BarangayStats>>({});
-  const [queueVerifications, setQueueVerifications] = useState<VerificationRequest[]>([]);
   const isSuperAdmin = currentRole === 'SUPERADMIN';
-
-  useEffect(() => {
-    if (isSuperAdmin) {
-      // 1. Fetch workforce metrics from dashboard stats
-      fetchDashboardStats()
-        .then((res) => {
-          if (res && Array.isArray(res.barangays) && res.barangays.length > 0) {
-            const map: Record<string, BarangayStats> = {};
-            res.barangays.forEach((b) => {
-              map[b.name.toLowerCase()] = b;
-            });
-            setLiveBarangayStats(map);
-          }
-        })
-        .catch(() => {});
-
-      // 2. Fetch directly from the Verification Queue API (same source of truth as Verifications tab)
-      fetchVerificationQueue()
-        .then((queue) => {
-          if (Array.isArray(queue)) {
-            setQueueVerifications(queue);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [isSuperAdmin]);
+  const directoryReady = dashboardMetrics !== null;
+  const directoryLoading = !directoryReady && !dashboardStatsError;
 
   // ---------------------------------------------------------
   // Barangay Directory Table State (Coverage, Filter & Pagination)
@@ -355,63 +327,10 @@ export const SettingsPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
 
-  // Set of active official LGU names (lowercased)
-  const activeLguMap = useMemo(() => {
-    const set = new Set<string>();
-    (barangays || []).forEach((b) => {
-      const clean = b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
-      if (clean) set.add(clean);
-    });
-    return set;
-  }, [barangays]);
-
-  // Combined directory: All barangays with active LGU OR with registered citizens
-  const allDirectoryItems = useMemo(() => {
-    const namesMap = new Map<string, { name: string; rawStat?: BarangayStats }>();
-
-    // 1. Add official LGUs
-    (barangays || []).forEach((b) => {
-      const clean = b.name.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
-      if (clean) {
-        namesMap.set(clean.toLowerCase(), { name: clean, rawStat: b });
-      }
-    });
-
-    // 2. Add user barangays where citizens are registered
-    (userBarangays || []).forEach((name) => {
-      const clean = name.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
-      if (clean && clean.toLowerCase() !== 'unassigned' && !namesMap.has(clean.toLowerCase())) {
-        namesMap.set(clean.toLowerCase(), { name: clean });
-      }
-    });
-
-    // 3. Fallback check across registered users
-    (users || []).forEach((u) => {
-      if (u.barangay) {
-        const clean = u.barangay.replace(/^(brgy\.?|barangay)\s+/i, '').trim();
-        if (clean && clean.toLowerCase() !== 'unassigned' && !namesMap.has(clean.toLowerCase())) {
-          namesMap.set(clean.toLowerCase(), { name: clean });
-        }
-      }
-    });
-
-    // Transform and sort: Active LGUs first, then alphabetical
-    return Array.from(namesMap.values())
-      .map(({ name, rawStat }) => {
-        const hasLguAccount = activeLguMap.has(name.toLowerCase());
-        return {
-          name,
-          hasLguAccount,
-          rawStat,
-        };
-      })
-      .sort((a, b) => {
-        if (a.hasLguAccount !== b.hasLguAccount) {
-          return a.hasLguAccount ? -1 : 1;
-        }
-        return a.name.localeCompare(b.name);
-      });
-  }, [barangays, userBarangays, users, activeLguMap]);
+  // Citizen locations are real directory entries, but only real active LGUs are configured.
+  const allDirectoryItems = useMemo(() => directoryBarangays.map(rawStat => ({
+    name: rawStat.name, hasLguAccount: rawStat.status === 'ACTIVE', rawStat,
+  })).sort((a, b) => Number(b.hasLguAccount) - Number(a.hasLguAccount) || a.name.localeCompare(b.name)), [directoryBarangays]);
 
   // Filtered items based on status tab and search query
   const filteredDirectoryItems = useMemo(() => {
@@ -472,70 +391,6 @@ export const SettingsPage: React.FC = () => {
       country: 'Philippines',
     }));
     setShowAddBarangay(true);
-  };
-
-  const getBarangayRowStats = (bName: string, rawStat?: BarangayStats) => {
-    const cleanName = bName.replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
-    const live = liveBarangayStats[cleanName];
-
-    // Source 1: Registered users (Kasambahay + Homeowners)
-    const bUsers = (users || []).filter((u) => {
-      const uBgy = (u.barangay || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
-      return uBgy === cleanName || uBgy.includes(cleanName) || cleanName.includes(uBgy);
-    });
-
-    // Source 2: Verification queue
-    const allQueue = queueVerifications.length > 0 ? queueVerifications : verifications;
-    const bVerifs = allQueue.filter((v) => {
-      const vBgy = (v.barangay || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim().toLowerCase();
-      return vBgy === cleanName || vBgy.includes(cleanName) || cleanName.includes(vBgy);
-    });
-
-    const hasUserData = bUsers.length > 0;
-    const hasQueueData = bVerifs.length > 0;
-
-    const totalRegistered = hasUserData
-      ? bUsers.length
-      : (hasQueueData ? bVerifs.length : (live?.totalRegistered ?? rawStat?.totalRegistered ?? 0));
-
-    const pending = hasQueueData
-      ? bVerifs.filter((v) => v.status === 'PENDING / REVIEW').length
-      : (hasUserData ? bUsers.filter((u) => u.status === 'PENDING' && !u.verified).length : (live?.pending ?? rawStat?.pending ?? 0));
-
-    const verified = hasQueueData
-      ? bVerifs.filter((v) => v.status === 'VERIFIED').length
-      : (hasUserData ? bUsers.filter((u) => u.verified).length : (live?.verified ?? rawStat?.verified ?? 0));
-
-    const rejected = hasQueueData
-      ? bVerifs.filter((v) => v.status === 'REJECTED').length
-      : (live?.rejected ?? rawStat?.rejected ?? 0);
-
-    const noDocuments = hasQueueData
-      ? bVerifs.filter((v) => v.status === 'NO_DOCUMENTS').length
-      : (hasUserData ? bUsers.filter((u) => !u.verified && u.status !== 'PENDING').length : (live?.noDocuments ?? rawStat?.noDocuments ?? 0));
-
-    // Kasambahay employment breakdown
-    const kasambahayUsers = bUsers.filter((u) => u.role === 'KASAMBAHAY');
-    const employed = live?.employed ?? rawStat?.employed ?? 0;
-    const available = kasambahayUsers.length > 0
-      ? Math.max(0, kasambahayUsers.length - employed)
-      : (live?.available ?? rawStat?.available ?? 0);
-
-    const totalKasambahay = kasambahayUsers.length > 0 ? kasambahayUsers.length : (employed + available);
-    const employmentRatio = totalKasambahay > 0
-      ? Math.round((employed / totalKasambahay) * 100)
-      : (live?.employmentRatio ?? rawStat?.employmentRatio ?? 0);
-
-    return {
-      totalRegistered,
-      pending,
-      verified,
-      rejected,
-      noDocuments,
-      employed,
-      available,
-      employmentRatio,
-    };
   };
 
   // ---------------------------------------------------------
@@ -786,7 +641,7 @@ export const SettingsPage: React.FC = () => {
                 <span className={`text-[11px] font-black ${
                   directoryFilter === 'ALL' ? 'text-zinc-900' : 'text-zinc-400'
                 }`}>
-                  ({allDirectoryItems.length})
+                  ({directoryReady ? allDirectoryItems.length : '—'})
                 </span>
               </button>
 
@@ -808,7 +663,7 @@ export const SettingsPage: React.FC = () => {
                 <span className={`text-[11px] font-black ${
                   directoryFilter === 'ACTIVE' ? 'text-emerald-600' : 'text-zinc-400'
                 }`}>
-                  ({totalActiveLgus})
+                  ({directoryReady ? totalActiveLgus : '—'})
                 </span>
               </button>
 
@@ -830,7 +685,7 @@ export const SettingsPage: React.FC = () => {
                 <span className={`text-[11px] font-black ${
                   directoryFilter === 'NEEDS_ACCOUNT' ? 'text-amber-600' : 'text-zinc-400'
                 }`}>
-                  ({totalNeedsSetup})
+                  ({directoryReady ? totalNeedsSetup : '—'})
                 </span>
               </button>
             </div>
@@ -869,7 +724,11 @@ export const SettingsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {paginatedItems.length === 0 ? (
+                {directoryLoading ? (
+                  <tr><td colSpan={11} className="py-12 text-center text-zinc-500"><span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Loading barangay data…</span></td></tr>
+                ) : dashboardStatsError ? (
+                  <tr><td colSpan={11} className="py-12 text-center text-amber-800"><p role="alert">{dashboardStatsError}</p><button type="button" onClick={() => refreshDashboardStats()} className="mt-3 rounded-full bg-zinc-900 text-white px-4 py-2">Retry</button></td></tr>
+                ) : paginatedItems.length === 0 ? (
                   <tr>
                     <td colSpan={11} className="py-12 text-center text-zinc-400 font-medium">
                       {directorySearch
@@ -879,7 +738,7 @@ export const SettingsPage: React.FC = () => {
                   </tr>
                 ) : (
                   paginatedItems.map((item) => {
-                    const rowStats = getBarangayRowStats(item.name, item.rawStat);
+                    const rowStats = item.rawStat;
                     return (
                       <tr key={item.name} className="hover:bg-zinc-50/50 transition">
                         <td className="py-3.5 px-4 font-bold font-display text-zinc-900">

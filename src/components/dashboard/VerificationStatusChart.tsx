@@ -144,10 +144,6 @@ export const VerificationStatusChart: React.FC = () => {
         if (!map.has(key)) map.set(key, cleaned.charAt(0).toUpperCase() + cleaned.slice(1));
       }
     });
-    ['Pagatpat', 'Canitoan'].forEach((p) => {
-      if (!map.has(p.toLowerCase())) map.set(p.toLowerCase(), p);
-    });
-
     // Ensure activeBarangay is always selectable even if custom
     if (activeBarangay && activeBarangay !== 'All Barangays') {
       const cleaned = cleanBarangayName(activeBarangay);
@@ -157,8 +153,7 @@ export const VerificationStatusChart: React.FC = () => {
     }
 
     const sorted = Array.from(map.values()).sort((a, b) => a.localeCompare(b));
-    const others = sorted.filter((b) => b !== 'Pagatpat' && b !== 'Canitoan');
-    return ['All Barangays', 'Pagatpat', 'Canitoan', ...others];
+    return ['All Barangays', ...sorted];
   }, [barangays, userBarangays, activeBarangay]);
 
   return (

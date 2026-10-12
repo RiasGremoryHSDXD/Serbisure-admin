@@ -5,40 +5,22 @@ import { StatCard } from '../components/dashboard/StatCard';
 import { EmploymentTrendChart } from '../components/dashboard/EmploymentTrendChart';
 import { VerificationStatusChart } from '../components/dashboard/VerificationStatusChart';
 import { DashboardActivityTable } from '../components/dashboard/DashboardActivityTable';
-import { CITY_METRICS } from '../data/mockData';
 
 export const DashboardPage: React.FC = () => {
   const {
     currentRole,
     selectedBarangay,
-    barangays,
     dashboardMetrics,
+    dashboardStatsError,
     refreshDashboardStats,
     isLoadingDashboardStats,
   } = useAdmin();
 
-  const activeBarangay =
-    barangays.find((b) => b.name.toLowerCase() === selectedBarangay.toLowerCase()) || barangays[0];
   const isSuperadmin = currentRole === 'SUPERADMIN';
-
-  // Real-time backend metrics take priority over static mock numbers
-  const totalWorkers = dashboardMetrics
-    ? dashboardMetrics.totalWorkers
-    : isSuperadmin
-    ? CITY_METRICS.totalWorkers
-    : activeBarangay?.totalWorkers ?? 0;
-
-  const totalEmployed = dashboardMetrics
-    ? dashboardMetrics.totalEmployed
-    : isSuperadmin
-    ? CITY_METRICS.totalEmployed
-    : activeBarangay?.employed ?? 0;
-
-  const totalAvailable = dashboardMetrics
-    ? dashboardMetrics.totalAvailable
-    : isSuperadmin
-    ? CITY_METRICS.totalAvailable
-    : activeBarangay?.available ?? 0;
+  const placeholder = dashboardStatsError ? 'Unavailable' : 'Loading…';
+  const totalWorkers = dashboardMetrics?.totalWorkers ?? placeholder;
+  const totalEmployed = dashboardMetrics?.totalEmployed ?? placeholder;
+  const totalAvailable = dashboardMetrics?.totalAvailable ?? placeholder;
 
 
   return (
@@ -65,6 +47,8 @@ export const DashboardPage: React.FC = () => {
           <span>Sync Real-Time</span>
         </button>
       </div>
+
+      {dashboardStatsError && <div role="alert" className="rounded-2xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900">{dashboardStatsError}</div>}
 
       {/* Top 3 Stat Cards (SerbiSure Pastel Bento Style) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
