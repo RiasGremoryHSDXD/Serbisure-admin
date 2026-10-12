@@ -1025,7 +1025,7 @@ export const DashboardActivityTable: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-3 px-3 font-black font-display text-zinc-900">
-                        ₱{b.offeredWage.toLocaleString()} / mo
+                        ₱{b.offeredWage.toLocaleString()} / {b.ratePeriod || (b.contractType.includes('Long-Term') ? 'month' : 'day')}
                       </td>
                       <td className="py-3 px-3">
                         <span className="px-3 py-1 rounded-full bg-zinc-100 text-zinc-800 text-[11px] font-bold">

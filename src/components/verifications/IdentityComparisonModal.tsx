@@ -809,7 +809,7 @@ export const IdentityComparisonModal: React.FC<IdentityComparisonModalProps> = (
           ) : (
             <>
               <p className="text-xs text-zinc-500">
-                Confirm facial structure and details match before approving.
+                Manual visual comparison only. No automated facial-liveness or face-match score is available.
               </p>
 
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">

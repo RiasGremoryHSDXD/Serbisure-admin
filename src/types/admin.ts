@@ -104,7 +104,7 @@ export interface VerificationRequest {
   contactNumber: string;
   email: string;
   notes?: string;
-  faceLivenessMatchScore?: number; // e.g. 98.4%
+  faceLivenessMatchScore?: number | null; // Unavailable until server-validated biometric evidence exists.
   ocrExtractedData?: {
     full_name?: string;
     first_name?: string;
@@ -131,7 +131,7 @@ export interface VerificationRequest {
     profile_value?: string;
     document_value?: string;
   }>;
-  ocrMatchScore?: number;
+  ocrMatchScore?: number | null; // Document text matching, percentage 0..100.
 }
 
 export interface LinkedWorker {
@@ -187,7 +187,10 @@ export interface BookingCompliance {
   monthlyBookingsCount: number; // Max 3 per month
   isCapped: boolean; // true if >= 3 bookings
   offeredWage: number;
-  minimumWageBaseline: number; // RTWPB-10 baseline e.g. 438/day or 5000/mo
+  minimumWageBaseline: number | null;
+  ratePeriod?: 'day' | 'month';
+  pairKey?: string | null;
+  rateNeedsReview?: boolean;
   isBelowMinimumWage: boolean;
   contractType: 'Short-Term On-Demand' | 'Formal Kasambahay (Long-Term)';
   statutoryBenefits: {
@@ -199,7 +202,7 @@ export interface BookingCompliance {
   startDate: string;
   barangay?: string;
   bookingStatus?: string;
-  status: 'ACTIVE' | 'FLAGGED_THROTTLED' | 'COMPLIANT' | 'DISPUTED' | 'BELOW_MINIMUM_WAGE';
+  status: 'ACTIVE' | 'FLAGGED_THROTTLED' | 'COMPLIANT' | 'DISPUTED' | 'BELOW_MINIMUM_WAGE' | 'REQUIRES_REVIEW';
 }
 
 export interface AuditLogEntry {

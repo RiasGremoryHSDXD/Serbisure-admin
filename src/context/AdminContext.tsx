@@ -641,41 +641,9 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const approveVerification = async (id: string) => {
-    // Optimistic UI update supporting targeted or package approval
-    setVerifications((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const newSecondaryStatus = item.secondaryStatus === 'REJECTED' ? 'REJECTED' : 'VERIFIED';
-          const newOverallStatus = newSecondaryStatus === 'REJECTED' ? 'REJECTED' : 'VERIFIED';
-          return {
-            ...item,
-            status: newOverallStatus,
-            primaryStatus: 'VERIFIED',
-            secondaryStatus: newSecondaryStatus,
-            recordStatus: newOverallStatus === 'VERIFIED' ? 'Clear Record' : item.recordStatus,
-          };
-        }
-        if (item.secondaryDocumentId === id) {
-          const newPrimaryStatus = item.primaryStatus || 'VERIFIED';
-          const newOverallStatus = newPrimaryStatus === 'REJECTED' ? 'REJECTED' : 'VERIFIED';
-          return {
-            ...item,
-            status: newOverallStatus,
-            secondaryStatus: 'VERIFIED',
-            recordStatus: newOverallStatus === 'VERIFIED' ? 'Clear Record' : item.recordStatus,
-          };
-        }
-        return item;
-      })
-    );
-
-    // Call live backend endpoint with reviewer identity
-    try {
-      await reviewVerification(id, 'approve', undefined, currentUser?.email || currentUser?.username);
-      await Promise.all([refreshVerifications(), refreshAuditLogs()]);
-    } catch (err) {
-      console.warn('[Admin API] Approve sync note:', err);
-    }
+    // A server-confirmed decision applies to this document only.
+    await reviewVerification(id, 'approve');
+    await Promise.all([refreshVerifications(), refreshAuditLogs()]);
   };
 
   const rejectVerification = async (id: string, reason?: string) => {
