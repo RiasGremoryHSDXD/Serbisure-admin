@@ -254,6 +254,7 @@ export interface ChatInboxEntry {
   partner_id: string;
   partner_name: string;
   partner_account_type: string;
+  partner_profile_image?: string | null;
   last_message: string;
   last_message_time: string;   // ISO 8601
   unread_count: number;

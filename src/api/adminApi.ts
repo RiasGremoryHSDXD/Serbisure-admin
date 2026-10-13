@@ -1,3 +1,4 @@
+import { parseChatInbox } from '../data/chatInbox';
 import { fetchApi, sanitizeUserFriendlyError } from './apiClient';
 export { sanitizeUserFriendlyError };
 import { VerificationRequest, UserProfile, DashboardStatsResponse, BookingCompliance, AuditLogEntry, ChatInboxEntry } from '../types/admin';
@@ -298,13 +299,7 @@ export async function toggleChatReaction(
  * GET /api/v1/chat/inbox/
  */
 export async function fetchChatInbox(): Promise<ChatInboxEntry[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const res = await fetchApi<any>('/api/v1/chat/inbox/');
-  // Handle all backend envelope shapes
-  if (Array.isArray(res)) return res;
-  if (Array.isArray(res?.data)) return res.data;
-  if (Array.isArray(res?.results)) return res.results;
-  return [];
+  return parseChatInbox(await fetchApi<unknown>('/api/v1/chat/inbox/'));
 }
 
 export interface ChangePasswordPayload {

@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { AdminRole, BarangayStats, VerificationRequest, UserProfile, BookingCompliance, DashboardMetrics, AuditLogEntry } from '../types/admin';
 import { DashboardRequestGate, validateDashboardSnapshot } from '../data/adminDashboard';
-import type { DashboardStatsResponse } from '../types/admin';
+import { useChatInbox } from '../hooks/useChatInbox';
+import type { ChatInboxEntry, DashboardStatsResponse } from '../types/admin';
 import { fetchVerificationQueue, reviewVerification, fetchRegisteredUsers, fetchDashboardStats, fetchDashboardActivity, fetchMonthlyTrend, MonthlyTrendPoint, adminLoginApi, fetchAuditLogs, createActiveBarangayApi } from '../api/adminApi';
 
 export interface AdminUser {
@@ -39,6 +40,15 @@ interface AdminContextType {
   setSelectedVerificationId: (id: string) => void;
   users: UserProfile[];
   bookings: BookingCompliance[];
+
+  chatInbox: ChatInboxEntry[];
+  unreadChatCount: number;
+  chatInboxLoaded: boolean;
+  chatInboxError: string | null;
+  refreshChatInbox: () => Promise<void>;
+  requestedChatPartner: ChatInboxEntry | null;
+  openChatPartner: (partner: ChatInboxEntry) => void;
+  clearChatPartnerRequest: () => void;
 
   // Loading States
   isLoadingVerifications: boolean;
@@ -125,6 +135,16 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return 'All Barangays';
   });
   const [activeNav, setActiveNav] = useState<string>('dashboard');
+  const inboxAccount = isAuthenticated ? currentUser?.id ?? null : null;
+  const inbox = useChatInbox(inboxAccount);
+  const [chatRequest, setChatRequest] = useState<{ account: string; partner: ChatInboxEntry } | null>(null);
+  const requestedChatPartner = chatRequest?.account === inboxAccount ? chatRequest.partner : null;
+  const openChatPartner = (partner: ChatInboxEntry) => {
+    if (!inboxAccount) return;
+    setChatRequest({ account: inboxAccount, partner });
+    setActiveNav('users');
+  };
+  const clearChatPartnerRequest = () => setChatRequest(null);
   
   // Cached mock rows from older builds must never seed a new session.
   useEffect(() => {
@@ -532,6 +552,10 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSelectedVerificationId,
         users,
         bookings,
+        ...inbox,
+        requestedChatPartner,
+        openChatPartner,
+        clearChatPartnerRequest,
         isLoadingVerifications,
         isLoadingUsers,
         isLoadingDashboardStats,
