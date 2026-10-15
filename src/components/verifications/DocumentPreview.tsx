@@ -293,9 +293,12 @@ export const DocumentPreview: React.FC = () => {
 }
 
   const handleApproveById = async (targetId: string, docLabel?: string) => {
-    await approveVerification(targetId);
-    setFeedbackMessage(`Approved ${selectedItem.name}'s ${docLabel || selectedItem.documentType}`);
-    setTimeout(() => setFeedbackMessage(null), 3000);
+    try {
+      await approveVerification(targetId);
+      setFeedbackMessage('Approved only this document: ' + (docLabel || selectedItem.documentType));
+    } catch (error) {
+      setFeedbackMessage('Approval failed: ' + (error instanceof Error ? error.message : 'Please try again.'));
+    }
   };
 
   const handleApprove = async () => {
@@ -390,7 +393,7 @@ export const DocumentPreview: React.FC = () => {
 
   const resolvedIdType = (idSide === 'back' && hasSecondary)
     ? (selectedItem.secondaryDocumentType || (isKasambahayPackage ? 'Police Clearance' : 'National ID (Back)'))
-    : (isKasambahayPackage ? 'NBI Clearance' : (hasSecondary ? 'National ID (Front)' : (isNationalId ? 'National ID' : selectedItem.documentType || 'Government ID')));
+    : (isKasambahayPackage ? 'NBI Clearance' : (hasSecondary ? 'National ID (Front)' : (selectedItem.documentType || 'Government ID')));
 
   const activeDocLabel = resolvedIdType;
 

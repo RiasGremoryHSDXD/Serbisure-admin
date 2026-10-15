@@ -11,41 +11,40 @@ export const EmploymentTrendChart: React.FC = () => {
     userBarangays,
   } = useAdmin();
 
-  // Selected barangay for the chart; defaults to Pagatpat as requested
+  // Default to the authenticated jurisdiction; no seeded barangays.
   const [activeBarangay, setActiveBarangay] = useState<string>(() => {
     if (selectedBarangay && selectedBarangay !== 'All Barangays') {
       return selectedBarangay;
     }
-    return 'Pagatpat';
+    return 'All Barangays';
   });
 
   const [chartData, setChartData] = useState<MonthlyTrendPoint[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   // Synchronize when parent selectedBarangay changes (e.g. from navbar selector)
   useEffect(() => {
-    if (selectedBarangay && selectedBarangay !== 'All Barangays') {
-      setActiveBarangay(selectedBarangay);
-    }
+    setActiveBarangay(selectedBarangay || 'All Barangays');
   }, [selectedBarangay]);
 
   // Fetch trend data whenever activeBarangay changes
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
+    setIsLoading(true); setError(null); setChartData([]);
 
     const bgyToFetch = activeBarangay === 'All Barangays' ? undefined : activeBarangay;
     fetchMonthlyTrend(bgyToFetch)
       .then((res) => {
         if (!isMounted) return;
-        if (res && Array.isArray(res.trend) && res.trend.length > 0) {
+        if (res && Array.isArray(res.trend)) {
           setChartData(res.trend);
           // Do NOT pre-select any month — tooltip should only appear on hover
         }
       })
-      .catch((err) => {
-        console.warn('[EmploymentTrendChart] Error fetching trend for', activeBarangay, err);
+      .catch(() => {
+        if (isMounted) { setChartData([]); setError('Could not load employment trends. Please retry.'); }
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -56,20 +55,7 @@ export const EmploymentTrendChart: React.FC = () => {
     };
   }, [activeBarangay]);
 
-  // Fallback data if still empty
-  const DISPLAY_DATA: MonthlyTrendPoint[] = useMemo(() => {
-    if (chartData.length > 0) return chartData;
-    const months = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
-    return months.map((m) => ({
-      month: m,
-      year: 2026,
-      employed: 0,
-      on_the_job: 0,
-      available: 0,
-      total: 0,
-    }));
-  }, [chartData]);
-
+  const DISPLAY_DATA = chartData;
 
   // Chart dimensions
   const width = 560;
@@ -100,7 +86,7 @@ export const EmploymentTrendChart: React.FC = () => {
   ];
 
   // Bar slot measurements
-  const slotWidth = chartAreaWidth / DISPLAY_DATA.length;
+  const slotWidth = DISPLAY_DATA.length ? chartAreaWidth / DISPLAY_DATA.length : 0;
   const barWidth = 10;
   const barSpacing = 3;
 
@@ -138,23 +124,13 @@ export const EmploymentTrendChart: React.FC = () => {
       }
     });
 
-    // Priority focus barangays
-    ['Pagatpat', 'Canitoan'].forEach((priority) => {
-      const key = priority.toLowerCase();
-      if (!map.has(key)) {
-        map.set(key, priority);
-      }
-    });
-
-    // Sort all individual barangays alphabetically
-    const sorted = Array.from(map.values()).sort((a, b) => a.localeCompare(b));
-    const otherBarangays = sorted.filter((b) => b !== 'Pagatpat' && b !== 'Canitoan');
-
-    return ['All Barangays', 'Pagatpat', 'Canitoan', ...otherBarangays];
+    return ['All Barangays', ...Array.from(map.values()).sort((a, b) => a.localeCompare(b))];
   }, [barangays, userBarangays]);
 
   return (
     <div className="bg-white rounded-3xl p-6 sm:p-7 flex flex-col justify-between h-full relative shadow-sm border border-zinc-100">
+      {error && <p role="alert" className="mb-3 text-xs text-amber-800">{error}</p>}
+      {!isLoading && !error && chartData.length === 0 && <p className="mb-3 text-xs text-zinc-500">No employment trend data yet.</p>}
       {/* Minimal Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">

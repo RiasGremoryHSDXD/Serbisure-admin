@@ -11,6 +11,11 @@ dist
 dist-ssr
 *.local
 
+# Private environment configuration; commit only the sanitized template.
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

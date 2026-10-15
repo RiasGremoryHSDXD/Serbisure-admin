@@ -24,11 +24,11 @@ export const LogisticsOverview: React.FC = () => {
 
         <div className="flex items-center gap-3 shrink-0">
           <div className="p-4 bg-[#F6F5F2] rounded-2xl text-center min-w-[100px]">
-            <div className="text-2xl font-black font-display text-[#FFB380]">1</div>
-            <div className="text-[10px] font-bold text-zinc-400 uppercase font-display mt-0.5">Throttled Pair</div>
+            <div className="text-2xl font-black font-display text-[#FFB380]">{new Set(bookings.filter(b => b.isCapped && b.pairKey).map(b => b.pairKey)).size}</div>
+            <div className="text-[10px] font-bold text-zinc-400 uppercase font-display mt-0.5">Pairs at Limit (loaded)</div>
           </div>
           <div className="p-4 bg-[#F6F5F2] rounded-2xl text-center min-w-[100px]">
-            <div className="text-2xl font-black font-display text-emerald-600">100%</div>
+            <div className="text-2xl font-black font-display text-emerald-600">{bookings.length ? Math.round(bookings.filter(b => b.status === 'COMPLIANT').length / bookings.length * 100) + '%' : 'No data'}</div>
             <div className="text-[10px] font-bold text-zinc-400 uppercase font-display mt-0.5">Wage Compliant</div>
           </div>
         </div>
@@ -126,12 +126,12 @@ export const LogisticsOverview: React.FC = () => {
                         ₱{b.offeredWage.toLocaleString()}
                       </span>
                       <span className="text-zinc-400 text-[10px] font-medium">
-                        {' '}/ {b.contractType.includes('Long-Term') ? 'mo' : 'day'}
+                        {' '}/ {b.ratePeriod || (b.contractType.includes('Long-Term') ? 'month' : 'day')}
                       </span>
                     </div>
                     <div className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>Above RTWPB-10 baseline</span>
+                      <span>{b.rateNeedsReview ? 'Rate requires review' : b.isBelowMinimumWage ? 'Below applicable minimum' : 'Meets applicable rate minimum'}</span>
                     </div>
                   </td>
 
@@ -154,12 +154,12 @@ export const LogisticsOverview: React.FC = () => {
                     {b.status === 'FLAGGED_THROTTLED' ? (
                       <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black font-display bg-[#FFF4ED] text-[#FFB380]">
                         <AlertTriangle className="w-3 h-3 text-[#FFB380]" />
-                        <span>CONTRACT LOCK</span>
+                        <span>LEGACY PAIR OVER LIMIT</span>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black font-display bg-emerald-50 text-emerald-700">
                         <FileCheck className="w-3 h-3 text-emerald-600" />
-                        <span>COMPLIANT</span>
+                        <span>{b.status === 'COMPLIANT' ? 'RATE COMPLIANT' : b.status === 'BELOW_MINIMUM_WAGE' ? 'BELOW MINIMUM' : 'REQUIRES REVIEW'}</span>
                       </span>
                     )}
                   </td>

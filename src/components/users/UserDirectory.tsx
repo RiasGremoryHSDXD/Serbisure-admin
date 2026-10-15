@@ -19,9 +19,16 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAdmin } from '../../context/AdminContext';
-import type { AccountRole, AdminRole, UserProfile, ChatMessage, ChatInboxEntry, SocialLink } from '../../types/admin';
-import { fetchChatThread, sendChatMessage, sendChatImageMessage, markMessageRead, toggleChatReaction, fetchChatInbox } from '../../api/adminApi';
+import type { AccountRole, AdminRole, UserProfile, ChatMessage, SocialLink } from '../../types/admin';
+import { fetchChatThread, sendChatMessage, sendChatImageMessage, sendChatTyping, toggleChatReaction } from '../../api/adminApi';
+import { realtime } from '../../realtime';
+import { UnreadBadge } from '../chat/UnreadBadge';
 import { getOptimizedWebpUrl } from '../../utils/imageOptimizer';
+
+function inboxRole(accountType: string): AccountRole {
+  const value = accountType.toUpperCase();
+  return value === 'ADMIN' ? 'SUPERADMIN' : value as AccountRole;
+}
 
 const SOCIAL_PLATFORMS: Record<string, { name: string; color: string; icon: React.ReactNode }> = {
   facebook: {
@@ -190,9 +197,9 @@ const UserAvatar: React.FC<{
 };
 
 export const UserDirectory: React.FC = () => {
-  const { users, refreshUsers, isLoadingUsers, currentRole, selectedBarangay, userBarangays, currentUser } = useAdmin();
+  const { users, refreshUsers, isLoadingUsers, currentRole, selectedBarangay, userBarangays, currentUser, chatInbox: inboxEntries, refreshChatInbox, requestedChatPartner, clearChatPartnerRequest } = useAdmin();
   const [activeTab, setActiveTab] = useState<AccountRole>('HOMEOWNER');
-  const [selectedUserId, setSelectedUserId] = useState<string>('usr-homeowner-1');
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [barangayFilter, setBarangayFilter] = useState<string>('ALL');
   const [userSearch, setUserSearch] = useState<string>('');
 
@@ -200,6 +207,8 @@ export const UserDirectory: React.FC = () => {
   const [messageThreadUserId, setMessageThreadUserId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
+  const [partnerTyping, setPartnerTyping] = useState(false);
+  const lastTypingSent = useRef(0);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -208,10 +217,6 @@ export const UserDirectory: React.FC = () => {
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isSendingImage, setIsSendingImage] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [inboxEntries, setInboxEntries] = useState<ChatInboxEntry[]>([]);
-  const inboxFetchingRef = useRef(false);   // ref-based guard — never stale like state
-  const localLastSeenRef = useRef<Map<string, number>>(new Map());
-
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -233,72 +238,62 @@ export const UserDirectory: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showEmojiPicker]);
 
-  // Load inbox on mount, then poll every 5 s (well under the 60/min throttle).
-  // Also silently refreshes the currently open thread so new incoming messages appear automatically.
-  // Pauses automatically when the tab is hidden to avoid wasting quota.
-  const messageThreadUserIdRef = useRef<string | null>(messageThreadUserId);
-  messageThreadUserIdRef.current = messageThreadUserId;
-
-  const refreshActiveThread = async (userId: string) => {
-    if (!userId || isChatLoading) return;
-    try {
-      const msgs = await fetchChatThread(userId);
-      setChatMessages((prev) => {
-        // Compare length or latest message ID or reaction changes before updating
-        const prevLen = prev.length;
-        const newLen = msgs.length;
-        const prevLastId = prevLen > 0 ? prev[prevLen - 1].chat_message_id : null;
-        const newLastId = newLen > 0 ? msgs[newLen - 1].chat_message_id : null;
-
-        if (prevLen !== newLen || prevLastId !== newLastId) {
-          return msgs;
-        }
-
-        // Check if any reactions changed
-        const reactionsChanged = prev.some((m, idx) => {
-          const newM = msgs[idx];
-          if (!newM) return true;
-          return JSON.stringify(m.reaction_summary) !== JSON.stringify(newM.reaction_summary) || m.my_reaction !== newM.my_reaction;
-        });
-
-        if (reactionsChanged) {
-          return msgs;
-        }
-
-        return prev;
-      });
-
-      // Mark any incoming unread messages as read
-      msgs
-        .filter((m) => !m.is_read && m.receiver_id !== userId)
-        .forEach((m) => markMessageRead(m.chat_message_id).catch(() => {}));
-    } catch {
-      // Silent catch for background poll to avoid interrupting the user
-    }
-  };
-
+  // Only a visible, explicitly opened conversation is fetched (the backend marks it read).
   useEffect(() => {
-    loadInbox();
-    const POLL_INTERVAL_MS = 5000;
-    const interval = setInterval(() => {
-      if (!document.hidden) {
-        loadInbox();
-        if (messageThreadUserIdRef.current) {
-          refreshActiveThread(messageThreadUserIdRef.current);
-        }
+    if (!messageThreadUserId) return;
+    let active = true;
+    let fetching = false;
+    let queued = false;
+    let typingTimer: ReturnType<typeof setTimeout> | undefined;
+    setPartnerTyping(false);
+    let loaded = false;
+    const sync = async () => {
+      if (!active || document.hidden) return;
+      if (fetching) { queued = true; return; }
+      fetching = true;
+      try {
+        const msgs = await fetchChatThread(messageThreadUserId);
+        if (!active) return;
+        setChatMessages(prev => JSON.stringify(prev) === JSON.stringify(msgs) ? prev : msgs);
+        setChatError(null);
+        loaded = true;
+        // Re-read authoritative counts after the successful server read acknowledgement.
+        void refreshChatInbox();
+      } catch {
+        if (active && !loaded) setChatError('Could not load messages. Please try again.');
+      } finally {
+        fetching = false;
+        if (active) setIsChatLoading(false);
+        if (active && queued) { queued = false; void sync(); }
       }
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    };
+    void sync();
+    const offEvent = realtime.subscribe(event => {
+      if (event.type === 'chat.typing' && event.partner_id === messageThreadUserId) {
+        setPartnerTyping(Boolean(event.is_typing));
+        clearTimeout(typingTimer);
+        if (event.is_typing) typingTimer = setTimeout(() => setPartnerTyping(false), 5000);
+        return;
+      }
+      if (event.type === 'sync' || event.type === 'booking.changed' || (event.type === 'chat.changed' && event.partner_id === messageThreadUserId)) void sync();
+    });
+    const timer = window.setInterval(() => { if (realtime.status !== 'connected') void sync(); }, 30000);
+    document.addEventListener('visibilitychange', sync);
+    return () => {
+      active = false;
+      offEvent(); clearTimeout(typingTimer);
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', sync);
+    };
+  }, [messageThreadUserId, currentUser?.id, refreshChatInbox]);
 
-  const openThread = async (userId: string) => {
-    const target = users.find((u) => u.id === userId);
-    if (target && !canMessage(currentRole, target)) {
+  const openThread = (userId: string) => {
+    const target = users.find(u => u.id === userId);
+    if (target && !canMessage(currentRole, target) && !inboxEntries.some(entry => entry.partner_id === userId)) {
       setMessageThreadUserId(null);
       return;
     }
-
+    if (userId === messageThreadUserId) { void refreshChatInbox(); return; }
     setMessageThreadUserId(userId);
     setChatMessages([]);
     setChatError(null);
@@ -307,26 +302,22 @@ export const UserDirectory: React.FC = () => {
     setImagePreviewUrl(null);
     setChatInput('');
     setIsChatLoading(true);
-    try {
-      const msgs = await fetchChatThread(userId);
-      setChatMessages(msgs);
-      if (msgs.length > 0) {
-        const latestMsg = msgs.reduce((a, b) =>
-          new Date(a.createdAt).getTime() > new Date(b.createdAt).getTime() ? a : b
-        );
-        localLastSeenRef.current.set(userId, new Date(latestMsg.createdAt).getTime());
-        setInboxEntries((prev) => [...prev]); // trigger inboxTimeMap recompute
-      }
-      // Mark unread messages read
-      msgs
-        .filter((m) => !m.is_read && m.receiver_id !== userId)
-        .forEach((m) => markMessageRead(m.chat_message_id).catch(() => {}));
-    } catch {
-      setChatError('Could not load messages. Please try again.');
-    } finally {
-      setIsChatLoading(false);
-    }
   };
+
+  // Header inbox works across pages, role tabs, searches and directory filters.
+  useEffect(() => {
+    if (!requestedChatPartner) return;
+    const target = users.find(u => u.id === requestedChatPartner.partner_id);
+    const role = target?.role ?? inboxRole(requestedChatPartner.partner_account_type);
+    setActiveTab(role);
+    setBarangayFilter('ALL');
+    setUserSearch('');
+    setSelectedUserId(requestedChatPartner.partner_id);
+    openThread(requestedChatPartner.partner_id);
+    clearChatPartnerRequest();
+    // The request object changes for every explicit selection, including the same partner.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedChatPartner]);
 
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -361,7 +352,7 @@ export const UserDirectory: React.FC = () => {
     try {
       const sent = await sendChatImageMessage(messageThreadUserId, fileToSend, captionToSend || undefined);
       setChatMessages((prev) => [...prev, sent]);
-      loadInbox(); // Re-sort the list after a new image message is sent
+      void refreshChatInbox(); // Re-sort the list after a new image message is sent
       setImageFile(null);
       setImagePreviewUrl(null);
       setChatInput('');
@@ -375,13 +366,14 @@ export const UserDirectory: React.FC = () => {
   const handleSend = async () => {
     if (!messageThreadUserId || !chatInput.trim() || isSending) return;
     const payload = chatInput.trim();
+    void sendChatTyping(messageThreadUserId, false).catch(() => {});
     setChatInput('');
     setIsSending(true);
     setChatError(null);
     try {
       const sent = await sendChatMessage(messageThreadUserId, payload);
       setChatMessages((prev) => [...prev, sent]);
-      loadInbox(); // Re-sort the list after a new message is sent
+      void refreshChatInbox(); // Re-sort the list after a new message is sent
     } catch (err: any) {
       setChatError(err?.message || 'Failed to send message. Please retry.');
     } finally {
@@ -439,29 +431,12 @@ export const UserDirectory: React.FC = () => {
     }
   };
 
-  const loadInbox = async () => {
-    // Use a ref so the guard is never stale between renders
-    if (inboxFetchingRef.current) return;
-    inboxFetchingRef.current = true;
-    try {
-      const entries = await fetchChatInbox();
-      if (Array.isArray(entries) && entries.length > 0) {
-        setInboxEntries(entries);
-      }
-    } catch (err: any) {
-      // Inbox fetch is best-effort — fallback is local sort or original order
-      console.warn('[UserDirectory] Inbox fetch failed (sort fallback active):', err?.message ?? err);
-    } finally {
-      inboxFetchingRef.current = false;
-    }
-  };
-
   /**
    * RBAC: Returns true if the logged-in admin is permitted to message this user.
    * - SUPERADMIN can message anyone.
    * - ADMIN (Barangay) can only message Homeowners and Kasambahays.
    */
-  function canMessage(currentRole: AdminRole, targetUser: UserProfile): boolean {
+  function canMessage(currentRole: AdminRole, targetUser: Pick<UserProfile, 'role'>): boolean {
     if (currentRole === 'SUPERADMIN') return true;
     return targetUser.role === 'HOMEOWNER' || targetUser.role === 'KASAMBAHAY' || targetUser.role === 'SUPERADMIN';
   }
@@ -538,20 +513,15 @@ export const UserDirectory: React.FC = () => {
       )
     : tabUsers;
 
-  // Build a lookup map: userId → last_message_time (ms since epoch, or 0 if no message)
-  // Merges local fallback (threads opened this session) and server inbox
-  const inboxTimeMap = React.useMemo(() => {
-    const map = new Map<string, number>();
-    // Layer 1: local fallback (from opened threads this session)
-    localLastSeenRef.current.forEach((ts, uid) => map.set(uid, ts));
-    // Layer 2: server inbox (overrides local if more recent)
-    inboxEntries.forEach((e) => {
-      const serverTs = new Date(e.last_message_time).getTime();
-      const localTs = map.get(e.partner_id) ?? 0;
-      map.set(e.partner_id, Math.max(serverTs, localTs));
-    });
-    return map;
-  }, [inboxEntries]);
+  const inboxTimeMap = React.useMemo(() => new Map(
+    inboxEntries.map(entry => [entry.partner_id, Date.parse(entry.last_message_time)])
+  ), [inboxEntries]);
+  const inboxByPartner = React.useMemo(() => new Map(
+    inboxEntries.map(entry => [entry.partner_id, entry])
+  ), [inboxEntries]);
+  const unreadForRole = (role: AccountRole) => inboxEntries
+    .filter(entry => inboxRole(entry.partner_account_type) === role)
+    .reduce((total, entry) => total + entry.unread_count, 0);
 
   // Sort filteredUsers: messaged users by recency desc, then un-messaged users in original order
   const sortedUsers = React.useMemo(() => {
@@ -565,13 +535,18 @@ export const UserDirectory: React.FC = () => {
 
   // Active selected user or fallback to first
   const selectedUser: UserProfile | undefined =
+    messageThreadUserId ? users.find(u => u.id === messageThreadUserId) :
     filteredUsers.find((u) => u.id === selectedUserId) ||
     filteredUsers[0] ||
     tabUsers[0] ||
     barangayScopedUsers[0];
 
   // User corresponding to open chat thread
-  const threadPartner = users.find((u) => u.id === messageThreadUserId) || selectedUser;
+  const threadEntry = inboxByPartner.get(messageThreadUserId ?? '');
+  const threadPartner = users.find(u => u.id === messageThreadUserId) ?? (threadEntry ? {
+    name: threadEntry.partner_name, avatar: threadEntry.partner_profile_image ?? undefined,
+    role: inboxRole(threadEntry.partner_account_type), barangay: undefined,
+  } : undefined);
 
   return (
     <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-white">
@@ -625,13 +600,13 @@ export const UserDirectory: React.FC = () => {
                 const first = displayableUsers.find((u) => u.role === 'HOMEOWNER');
                 if (first) setSelectedUserId(first.id);
               }}
-              className={`px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
                 activeTab === 'HOMEOWNER'
                   ? 'bg-white text-zinc-950 shadow-xs'
                   : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
-              Homeowners
+              Homeowners <UnreadBadge count={unreadForRole('HOMEOWNER')} />
             </button>
             <button
               onClick={() => {
@@ -641,13 +616,13 @@ export const UserDirectory: React.FC = () => {
                 const first = displayableUsers.find((u) => u.role === 'KASAMBAHAY');
                 if (first) setSelectedUserId(first.id);
               }}
-              className={`px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
                 activeTab === 'KASAMBAHAY'
                   ? 'bg-white text-zinc-950 shadow-xs'
                   : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
-              Kasambahays
+              Kasambahays <UnreadBadge count={unreadForRole('KASAMBAHAY')} />
             </button>
             {currentRole === 'SUPERADMIN' ? (
               <button
@@ -658,13 +633,13 @@ export const UserDirectory: React.FC = () => {
                   const first = displayableUsers.find((u) => u.role === 'BARANGAY');
                   if (first) setSelectedUserId(first.id);
                 }}
-                className={`px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
                   activeTab === 'BARANGAY'
                     ? 'bg-white text-zinc-950 shadow-xs'
                     : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
-                Barangay Admins
+                Barangay Admins <UnreadBadge count={unreadForRole('BARANGAY')} />
               </button>
             ) : (
               <button
@@ -675,13 +650,13 @@ export const UserDirectory: React.FC = () => {
                   const first = displayableUsers.find((u) => u.role === 'SUPERADMIN');
                   if (first) setSelectedUserId(first.id);
                 }}
-                className={`px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black font-display transition-all cursor-pointer ${
                   activeTab === 'SUPERADMIN'
                     ? 'bg-white text-zinc-950 shadow-xs'
                     : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
-                City SuperAdmin
+                City SuperAdmin <UnreadBadge count={unreadForRole('SUPERADMIN')} />
               </button>
             )}
           </div>
@@ -689,7 +664,7 @@ export const UserDirectory: React.FC = () => {
           {/* Sync Refresh Button */}
           <button
             type="button"
-            onClick={() => refreshUsers()}
+            onClick={() => { void refreshUsers(); void refreshChatInbox(); }}
             title="Sync Users with Backend"
             className="p-2 rounded-full bg-[#F6F5F2] hover:bg-zinc-200/70 text-zinc-700 transition-colors cursor-pointer border-0"
           >
@@ -759,9 +734,18 @@ export const UserDirectory: React.FC = () => {
               <ul className="divide-y divide-zinc-100">
                 {sortedUsers.map((user) => {
                   const isSelected = selectedUser?.id === user.id;
+                  const unread = inboxByPartner.get(user.id)?.unread_count ?? 0;
                   return (
                     <li
                       key={user.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${user.name}, ${unread} unread messages. Open conversation`}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault(); setSelectedUserId(user.id); openThread(user.id);
+                        }
+                      }}
                       onClick={() => {
                         setSelectedUserId(user.id);
                         if (canMessage(currentRole, user)) {
@@ -815,11 +799,12 @@ export const UserDirectory: React.FC = () => {
                         </div>
                         {/* Last message preview */}
                         {inboxTimeMap.get(user.id) !== undefined && (
-                          <p className="text-xs text-zinc-500 truncate mt-1 leading-snug font-medium">
-                            {inboxEntries.find((e) => e.partner_id === user.id)?.last_message ?? ''}
+                          <p className={`text-xs truncate mt-1 leading-snug ${unread > 0 ? 'text-zinc-900 font-bold' : 'text-zinc-500 font-medium'}`}>
+                            {inboxByPartner.get(user.id)?.last_message ?? ''}
                           </p>
                         )}
                       </div>
+                      <UnreadBadge count={unread} />
                     </li>
                   );
                 })}
@@ -899,6 +884,7 @@ export const UserDirectory: React.FC = () => {
               </div>
 
               {/* Message List Area */}
+              {partnerTyping && <p role="status" className="px-4 py-2 text-xs text-zinc-500 bg-orange-50">{threadPartner?.name || 'Your contact'} is typing…</p>}
               <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#FAF9F6]">
                 {isChatLoading ? (
                   <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-2 py-12">
@@ -1176,7 +1162,13 @@ export const UserDirectory: React.FC = () => {
                         <textarea
                           rows={1}
                           value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
+                          onChange={e => {
+                            setChatInput(e.target.value);
+                            if (messageThreadUserId && (!e.target.value || Date.now() - lastTypingSent.current > 2000)) {
+                              lastTypingSent.current = Date.now();
+                              void sendChatTyping(messageThreadUserId, Boolean(e.target.value)).catch(() => {});
+                            }
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                               e.preventDefault();

@@ -24,14 +24,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMobileMenuOpen = false,
   setIsMobileMenuOpen
 }) => {
-  const { currentRole, selectedBarangay, activeNav, setActiveNav, verifications, currentUser, logout } = useAdmin();
+  const { currentRole, selectedBarangay, activeNav, setActiveNav, verifications, currentUser, logout, unreadChatCount } = useAdmin();
 
   const pendingCount = verifications.filter(v => v.status === 'PENDING / REVIEW').length;
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'verifications', label: 'Verifications', icon: CheckCircle2, badge: pendingCount },
-    { id: 'users', label: 'Users', icon: Users },
+    { id: 'users', label: 'Users', icon: Users, badge: unreadChatCount },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -114,7 +114,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                title={isSidebarCollapsed ? item.label : undefined}
+                title={item.id === 'users' && unreadChatCount > 0 ? `${unreadChatCount} unread messages` : isSidebarCollapsed ? item.label : undefined}
+                aria-label={item.id === 'users' ? `Users, ${unreadChatCount} unread messages` : item.label}
                 className={
                   isSidebarCollapsed
                     ? `relative w-full md:w-10 md:h-10 md:rounded-full md:mx-auto flex items-center justify-between md:justify-center px-4 py-2.5 md:p-0 rounded-full text-[13px] md:text-xs font-bold font-display tracking-tight transition-all duration-150 cursor-pointer ${
@@ -140,7 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   } ${
                     isActive ? 'bg-[#FFB380] text-white' : 'bg-zinc-100 text-zinc-700'
                   }`}>
-                    {item.badge}
+                    {item.badge > 99 ? '99+' : item.badge}
                   </span>
                 )}
 

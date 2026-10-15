@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, Check, Building2, Shield, LogOut, MapPinOff, Menu } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
+import { MessageInbox } from '../chat/MessageInbox';
 import { AdminRole } from '../../types/admin';
 
 interface HeaderProps {
@@ -48,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
 
       {/* Right Controls: Role Badge & Admin Profile */}
       <div className="flex items-center gap-2 sm:gap-3 relative shrink-0">
+        <MessageInbox />
         {/* Interactive Role Switcher Pill */}
         <div className="relative">
           {currentUser?.role === 'SUPERADMIN' ? (
