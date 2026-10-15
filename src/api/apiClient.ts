@@ -1,7 +1,7 @@
 // ============================================================================
 // BACKEND TARGET TOGGLE
-// Set to true  (or 'local', 1)  -> Local backend  (http://localhost:8000) [DEFAULT]
-// Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app)
+// Set to true  (or 'local', 1)  -> Local backend  (http://localhost:8000)
+// Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app) [DEFAULT]
 //
 // For Render, set VITE_API_URL to the HTTPS Render backend URL.
 // VITE_API_URL, when set, overrides this toggle. Restart Vite after env changes.
