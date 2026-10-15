@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { AdminRole, BarangayStats, VerificationRequest, UserProfile, BookingCompliance, DashboardMetrics, AuditLogEntry } from '../types/admin';
 import { DashboardRequestGate, validateDashboardSnapshot } from '../data/adminDashboard';
+import type { RealtimeStatus } from '../realtime/RealtimeClient';
 import { useChatInbox } from '../hooks/useChatInbox';
 import type { ChatInboxEntry, DashboardStatsResponse } from '../types/admin';
 import { fetchVerificationQueue, reviewVerification, fetchRegisteredUsers, fetchDashboardStats, fetchDashboardActivity, fetchMonthlyTrend, MonthlyTrendPoint, adminLoginApi, fetchAuditLogs, createActiveBarangayApi } from '../api/adminApi';
@@ -41,6 +42,7 @@ interface AdminContextType {
   users: UserProfile[];
   bookings: BookingCompliance[];
 
+  chatRealtimeStatus: RealtimeStatus;
   chatInbox: ChatInboxEntry[];
   unreadChatCount: number;
   chatInboxLoaded: boolean;

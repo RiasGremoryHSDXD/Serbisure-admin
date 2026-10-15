@@ -5,7 +5,7 @@ import { messageCountLabel } from '../../data/chatInbox';
 import { UnreadBadge } from './UnreadBadge';
 
 export const MessageInbox: React.FC = () => {
-  const { chatInbox, unreadChatCount, chatInboxLoaded, chatInboxError, refreshChatInbox, openChatPartner } = useAdmin();
+  const { chatInbox, unreadChatCount, chatInboxLoaded, chatInboxError, chatRealtimeStatus, refreshChatInbox, openChatPartner } = useAdmin();
   const [open, setOpen] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -37,6 +37,7 @@ export const MessageInbox: React.FC = () => {
               <p className="text-xs text-zinc-500" role="status">{chatInboxLoaded ? messageCountLabel(unreadChatCount) : 'Checking messages…'}</p></div>
             <button type="button" onClick={() => void refreshChatInbox()} aria-label="Refresh messages" className="p-2 rounded-full hover:bg-zinc-100"><RotateCw className="w-4 h-4" /></button>
           </div>
+          <p role="status" className="px-4 py-2 text-[11px] text-zinc-500">{chatRealtimeStatus === 'connected' ? 'Live updates' : chatRealtimeStatus === 'unauthorized' ? 'Live updates unavailable. Refresh or sign in again.' : 'Reconnecting… Messages will sync when connected.'}</p>
           {chatInboxError && <p role="status" className="px-4 py-2 bg-amber-50 text-amber-800 text-xs">{chatInboxError} Use refresh to retry.</p>}
           {!chatInboxLoaded && !chatInboxError && <p className="p-5 text-sm text-zinc-500">Loading messages…</p>}
           {chatInboxLoaded && chatInbox.length === 0 && <p className="p-5 text-sm text-zinc-500">No messages yet.</p>}

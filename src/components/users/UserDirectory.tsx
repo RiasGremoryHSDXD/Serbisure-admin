@@ -20,7 +20,8 @@ import {
 import clsx from 'clsx';
 import { useAdmin } from '../../context/AdminContext';
 import type { AccountRole, AdminRole, UserProfile, ChatMessage, SocialLink } from '../../types/admin';
-import { fetchChatThread, sendChatMessage, sendChatImageMessage, toggleChatReaction } from '../../api/adminApi';
+import { fetchChatThread, sendChatMessage, sendChatImageMessage, sendChatTyping, toggleChatReaction } from '../../api/adminApi';
+import { realtime } from '../../realtime';
 import { UnreadBadge } from '../chat/UnreadBadge';
 import { getOptimizedWebpUrl } from '../../utils/imageOptimizer';
 
@@ -206,6 +207,8 @@ export const UserDirectory: React.FC = () => {
   const [messageThreadUserId, setMessageThreadUserId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
+  const [partnerTyping, setPartnerTyping] = useState(false);
+  const lastTypingSent = useRef(0);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -240,9 +243,13 @@ export const UserDirectory: React.FC = () => {
     if (!messageThreadUserId) return;
     let active = true;
     let fetching = false;
+    let queued = false;
+    let typingTimer: ReturnType<typeof setTimeout> | undefined;
+    setPartnerTyping(false);
     let loaded = false;
     const sync = async () => {
-      if (!active || fetching || document.hidden) return;
+      if (!active || document.hidden) return;
+      if (fetching) { queued = true; return; }
       fetching = true;
       try {
         const msgs = await fetchChatThread(messageThreadUserId);
@@ -257,13 +264,24 @@ export const UserDirectory: React.FC = () => {
       } finally {
         fetching = false;
         if (active) setIsChatLoading(false);
+        if (active && queued) { queued = false; void sync(); }
       }
     };
     void sync();
-    const timer = window.setInterval(() => void sync(), 5000);
+    const offEvent = realtime.subscribe(event => {
+      if (event.type === 'chat.typing' && event.partner_id === messageThreadUserId) {
+        setPartnerTyping(Boolean(event.is_typing));
+        clearTimeout(typingTimer);
+        if (event.is_typing) typingTimer = setTimeout(() => setPartnerTyping(false), 5000);
+        return;
+      }
+      if (event.type === 'sync' || event.type === 'booking.changed' || (event.type === 'chat.changed' && event.partner_id === messageThreadUserId)) void sync();
+    });
+    const timer = window.setInterval(() => { if (realtime.status !== 'connected') void sync(); }, 30000);
     document.addEventListener('visibilitychange', sync);
     return () => {
       active = false;
+      offEvent(); clearTimeout(typingTimer);
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', sync);
     };
@@ -348,6 +366,7 @@ export const UserDirectory: React.FC = () => {
   const handleSend = async () => {
     if (!messageThreadUserId || !chatInput.trim() || isSending) return;
     const payload = chatInput.trim();
+    void sendChatTyping(messageThreadUserId, false).catch(() => {});
     setChatInput('');
     setIsSending(true);
     setChatError(null);
@@ -865,6 +884,7 @@ export const UserDirectory: React.FC = () => {
               </div>
 
               {/* Message List Area */}
+              {partnerTyping && <p role="status" className="px-4 py-2 text-xs text-zinc-500 bg-orange-50">{threadPartner?.name || 'Your contact'} is typing…</p>}
               <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#FAF9F6]">
                 {isChatLoading ? (
                   <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-2 py-12">
@@ -1142,7 +1162,13 @@ export const UserDirectory: React.FC = () => {
                         <textarea
                           rows={1}
                           value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
+                          onChange={e => {
+                            setChatInput(e.target.value);
+                            if (messageThreadUserId && (!e.target.value || Date.now() - lastTypingSent.current > 2000)) {
+                              lastTypingSent.current = Date.now();
+                              void sendChatTyping(messageThreadUserId, Boolean(e.target.value)).catch(() => {});
+                            }
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                               e.preventDefault();

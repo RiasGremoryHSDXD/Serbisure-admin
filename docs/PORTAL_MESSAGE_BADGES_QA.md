@@ -4,7 +4,7 @@ The personal inbox is fetched from authenticated `GET /api/v1/chat/inbox/` once 
 
 The header message icon and Users navigation show the total. The header opens recent conversations with previews and individual unread counts; selecting an entry navigates to Users and opens that conversation, including partners outside the current directory filter. Role tabs and directory rows also show counts. Counts above 99 display `99+` with the exact count retained in accessible labels. Zero-count badges disappear.
 
-Refresh runs every five seconds while the tab is visible, and when focus/visibility returns. This is an in-portal indicator, not an operating-system push notification. With a conversation open, its thread also refreshes every five seconds. Hidden tabs do not fetch threads and therefore do not automatically acknowledge newly arrived messages.
+An authenticated private WebSocket now triggers inbox/thread refreshes immediately on message changes. Focus/visibility changes and reconnects reconcile through REST. A 30-second REST recovery check runs only while live updates are disconnected. This is an in-portal indicator, not an operating-system push notification. Hidden tabs suspend their socket and do not fetch threads or acknowledge newly arrived messages. See the backend docs/REALTIME_RENDER_SETUP.md for ASGI and Redis setup.
 
 Opening a thread uses the existing authenticated backend thread endpoint, which marks that account's incoming messages from the chosen partner as read. Only after a successful thread response does the portal request updated inbox counts. It does not clear badges optimistically or send redundant read PATCH requests. An inbox request started before the thread read is followed by a fresh request. Failed inbox sync retains the last confirmed counts and displays a retry notice in the message menu. Account changes and logout discard prior inbox state and invalidate late responses. Perspective/jurisdiction filters never change whose personal messages are counted.
 
@@ -17,7 +17,7 @@ Opening a thread uses the existing authenticated backend thread endpoint, which 
 
 ## Manual acceptance on the running app
 
-1. Sign in as Superadmin and stay on Dashboard. From mobile, send two messages to that account. Within five seconds, the header and Users badge should show `2`.
+1. Sign in as Superadmin and stay on Dashboard. From mobile, send two messages to that account. Once the WebSocket is connected, the header and Users badge should show `2`.
 2. Open the message menu: the sender's preview and count should appear. Select it: the actual thread opens and that sender's badge clears after server acknowledgment. Other senders remain unread.
 3. Send a message from a Kasambahay while Homeowners is selected. The Kasambahays tab has a badge; the header menu also opens the thread directly.
 4. Repeat with a real Barangay account. Its inbox must contain only messages sent to that account.

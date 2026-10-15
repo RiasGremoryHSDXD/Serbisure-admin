@@ -370,3 +370,8 @@ export async function updateDeskProfileApi(payload: {
 }
 
 
+
+/** Publish a transient typing indicator through the authenticated chat API. */
+export async function sendChatTyping(partnerId: string, isTyping: boolean): Promise<void> {
+  await fetchApi('/api/v1/chat/typing/', { method: 'POST', body: JSON.stringify({ partner_id: partnerId, is_typing: isTyping }) });
+}

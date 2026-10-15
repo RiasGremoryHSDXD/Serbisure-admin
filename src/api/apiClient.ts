@@ -3,7 +3,8 @@
 // Set to true  (or 'local', 1)  -> Local backend  (http://localhost:8000) [DEFAULT]
 // Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app)
 //
-// When deploying to production, simply change this line to false (or 'vercel').
+// For Render, set VITE_API_URL to the HTTPS Render backend URL.
+// VITE_API_URL, when set, overrides this toggle. Restart Vite after env changes.
 // NOTE: Strictly NO automatic fallback between servers.
 // ============================================================================
 export const USE_LOCAL_BACKEND: boolean | string | number = false;
@@ -18,6 +19,9 @@ export const VERCEL_API_URL = 'https://serbisure-backend-rho.vercel.app';
  * Strictly NO automatic runtime fallback between servers.
  */
 function resolveBaseUrl(): string {
+  const configured = import.meta.env.VITE_API_URL;
+  if (configured && /^https?:\/\//.test(configured)) return configured.replace(/\/+$/, '');
+  if (typeof USE_LOCAL_BACKEND === 'string' && /^https?:\/\//.test(USE_LOCAL_BACKEND)) return USE_LOCAL_BACKEND;
   if (
     USE_LOCAL_BACKEND === true ||
     USE_LOCAL_BACKEND === 'local' ||
