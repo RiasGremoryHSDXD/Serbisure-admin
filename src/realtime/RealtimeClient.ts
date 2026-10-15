@@ -1,5 +1,5 @@
 export type RealtimeStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'unauthorized';
-export type RealtimeEvent = { type: 'sync' | 'chat.changed' | 'chat.typing' | 'booking.changed' | 'notifications.changed'; partner_id?: string; message_id?: string; booking_id?: string; is_typing?: boolean };
+export type RealtimeEvent = { type: 'sync' | 'chat.changed' | 'chat.typing' | 'presence.changed' | 'booking.changed' | 'notifications.changed'; partner_id?: string; message_id?: string; booking_id?: string; is_typing?: boolean; is_online?: boolean | null; expires_in?: number };
 export interface SocketLike {
   onopen: ((event: any) => void) | null;
   onmessage: ((event: any) => void) | null;
@@ -23,9 +23,21 @@ export class RealtimeClient {
   private lastSeen = 0;
   private events = new Set<(event: RealtimeEvent) => void>();
   private statuses = new Set<(status: RealtimeStatus) => void>();
+  private presenceWatches = new Map<symbol, string[]>();
   constructor(private baseUrl: string, private factory: (url: string) => SocketLike = url => new WebSocket(url)) {}
   subscribe(listener: (event: RealtimeEvent) => void) { this.events.add(listener); return () => { this.events.delete(listener); }; }
   subscribeStatus(listener: (status: RealtimeStatus) => void) { this.statuses.add(listener); return () => { this.statuses.delete(listener); }; }
+  watchPresence(partnerIds: string[]) {
+    const key = Symbol();
+    this.presenceWatches.set(key, partnerIds);
+    this.sendPresenceWatch();
+    return () => { this.presenceWatches.delete(key); this.sendPresenceWatch(); };
+  }
+  private sendPresenceWatch() {
+    if (this.status !== 'connected' || !this.socket) return;
+    const partner_ids = [...new Set([...this.presenceWatches.values()].flat())].slice(-100);
+    try { this.socket.send(JSON.stringify({ type: 'presence.watch', partner_ids })); } catch { /* Heartbeat reconnects. */ }
+  }
   private setStatus(status: RealtimeStatus) { this.status = status; this.statuses.forEach(listener => listener(status)); }
   start(token: string | null) {
     if (token === this.token && this.socket) return;
@@ -69,6 +81,7 @@ export class RealtimeClient {
       this.lastSeen = Date.now();
       if (data.type === 'ready') {
         clearTimeout(this.authTimeout); this.attempt = 0; this.setStatus('connected');
+        if (this.presenceWatches.size) this.sendPresenceWatch();
         this.events.forEach(listener => listener({ type: 'sync' }));
         clearInterval(this.heartbeat);
         this.heartbeat = setInterval(() => {
@@ -76,7 +89,7 @@ export class RealtimeClient {
           if (Date.now() - this.lastSeen > 65000) { reconnect(); return; }
           try { socket.send(JSON.stringify({ type: 'ping' })); } catch { reconnect(); }
         }, 25000);
-      } else if (this.status === 'connected' && ['chat.changed', 'chat.typing', 'booking.changed', 'notifications.changed'].includes(data.type)) {
+      } else if (this.status === 'connected' && ['chat.changed', 'chat.typing', 'presence.changed', 'booking.changed', 'notifications.changed'].includes(data.type)) {
         this.events.forEach(listener => listener(data as RealtimeEvent));
       }
     };

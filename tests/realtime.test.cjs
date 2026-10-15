@@ -59,3 +59,20 @@ test('heartbeat pings detect a stale server and reconnect', t => {
   t.mock.timers.tick(50000); assert.equal(f.client.status, 'reconnecting');
   assert.equal(f.sockets[0].closed, true); f.client.stop();
 });
+
+test('presence subscriptions reconcile after authentication and reconnect, with independent consumer cleanup', t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const f = fixture();
+  const first = f.client.watchPresence(['one', 'two']);
+  const second = f.client.watchPresence(['two', 'three']);
+  f.client.start('token'); f.ready();
+  assert.deepEqual(f.sockets[0].sent.at(-1), { type: 'presence.watch', partner_ids: ['one', 'two', 'three'] });
+  f.sockets[0].onmessage({ data: JSON.stringify({ type: 'presence.changed', partner_id: 'two', is_online: false }) });
+  assert.equal(f.events.at(-1).is_online, false);
+  first();
+  assert.deepEqual(f.sockets[0].sent.at(-1).partner_ids, ['two', 'three']);
+  f.sockets[0].onclose({ code: 1006 }); t.mock.timers.tick(1600); f.ready();
+  assert.deepEqual(f.sockets[1].sent.at(-1).partner_ids, ['two', 'three']);
+  second(); assert.deepEqual(f.sockets[1].sent.at(-1).partner_ids, []);
+  f.client.stop();
+});

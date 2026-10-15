@@ -23,6 +23,9 @@ import type { AccountRole, AdminRole, UserProfile, ChatMessage, SocialLink } fro
 import { fetchChatThread, sendChatMessage, sendChatImageMessage, sendChatTyping, toggleChatReaction } from '../../api/adminApi';
 import { realtime } from '../../realtime';
 import { UnreadBadge } from '../chat/UnreadBadge';
+import { PresenceIndicator } from '../chat/PresenceIndicator';
+import { useChatPresence } from '../../hooks/useChatPresence';
+import { createChatTyping } from '../../data/chatTyping';
 import { getOptimizedWebpUrl } from '../../utils/imageOptimizer';
 
 function inboxRole(accountType: string): AccountRole {
@@ -207,8 +210,9 @@ export const UserDirectory: React.FC = () => {
   const [messageThreadUserId, setMessageThreadUserId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const [partnerTyping, setPartnerTyping] = useState(false);
-  const lastTypingSent = useRef(0);
+  const [typingPartnerId, setTypingPartnerId] = useState<string | null>(null);
+  const partnerTyping = !!messageThreadUserId && typingPartnerId === messageThreadUserId;
+  const composerTyping = useRef<ReturnType<typeof createChatTyping> | null>(null);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -224,7 +228,20 @@ export const UserDirectory: React.FC = () => {
   // Auto-scroll chat to latest message
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
+  }, [chatMessages, partnerTyping]);
+
+  useEffect(() => {
+    if (!messageThreadUserId || !currentUser?.id) return;
+    const typing = createChatTyping(value => sendChatTyping(messageThreadUserId, value));
+    composerTyping.current = typing;
+    const stopWhenHidden = () => { if (document.hidden) typing.stop(); };
+    document.addEventListener('visibilitychange', stopWhenHidden);
+    return () => {
+      typing.dispose();
+      if (composerTyping.current === typing) composerTyping.current = null;
+      document.removeEventListener('visibilitychange', stopWhenHidden);
+    };
+  }, [messageThreadUserId, currentUser?.id]);
 
   // Close emoji picker when clicking outside
   useEffect(() => {
@@ -245,7 +262,7 @@ export const UserDirectory: React.FC = () => {
     let fetching = false;
     let queued = false;
     let typingTimer: ReturnType<typeof setTimeout> | undefined;
-    setPartnerTyping(false);
+    setTypingPartnerId(null);
     let loaded = false;
     const sync = async () => {
       if (!active || document.hidden) return;
@@ -270,18 +287,24 @@ export const UserDirectory: React.FC = () => {
     void sync();
     const offEvent = realtime.subscribe(event => {
       if (event.type === 'chat.typing' && event.partner_id === messageThreadUserId) {
-        setPartnerTyping(Boolean(event.is_typing));
+        setTypingPartnerId(event.is_typing === true ? messageThreadUserId : null);
         clearTimeout(typingTimer);
-        if (event.is_typing) typingTimer = setTimeout(() => setPartnerTyping(false), 5000);
+        if (event.is_typing === true) typingTimer = setTimeout(() => setTypingPartnerId(null), 5000);
         return;
       }
+      if (event.type === 'chat.changed' && event.partner_id === messageThreadUserId) {
+        clearTimeout(typingTimer); setTypingPartnerId(null);
+      }
       if (event.type === 'sync' || event.type === 'booking.changed' || (event.type === 'chat.changed' && event.partner_id === messageThreadUserId)) void sync();
+    });
+    const offStatus = realtime.subscribeStatus(status => {
+      if (status !== 'connected') { clearTimeout(typingTimer); setTypingPartnerId(null); }
     });
     const timer = window.setInterval(() => { if (realtime.status !== 'connected') void sync(); }, 30000);
     document.addEventListener('visibilitychange', sync);
     return () => {
       active = false;
-      offEvent(); clearTimeout(typingTimer);
+      offEvent(); offStatus(); clearTimeout(typingTimer);
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', sync);
     };
@@ -344,6 +367,7 @@ export const UserDirectory: React.FC = () => {
 
   const handleSendImage = async () => {
     if (!messageThreadUserId || !imageFile || isSendingImage) return;
+    composerTyping.current?.stop();
     const fileToSend = imageFile;
     const captionToSend = chatInput.trim();
 
@@ -366,7 +390,7 @@ export const UserDirectory: React.FC = () => {
   const handleSend = async () => {
     if (!messageThreadUserId || !chatInput.trim() || isSending) return;
     const payload = chatInput.trim();
-    void sendChatTyping(messageThreadUserId, false).catch(() => {});
+    composerTyping.current?.stop();
     setChatInput('');
     setIsSending(true);
     setChatError(null);
@@ -547,6 +571,11 @@ export const UserDirectory: React.FC = () => {
     name: threadEntry.partner_name, avatar: threadEntry.partner_profile_image ?? undefined,
     role: inboxRole(threadEntry.partner_account_type), barangay: undefined,
   } : undefined);
+  const presence = useChatPresence(currentUser?.id ?? null, [
+    ...sortedUsers.slice(0, 75).map(user => user.id),
+    ...(messageThreadUserId ? [messageThreadUserId] : []),
+  ]);
+  const threadPresence = messageThreadUserId ? presence(messageThreadUserId) : undefined;
 
   return (
     <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-white">
@@ -735,6 +764,7 @@ export const UserDirectory: React.FC = () => {
                 {sortedUsers.map((user) => {
                   const isSelected = selectedUser?.id === user.id;
                   const unread = inboxByPartner.get(user.id)?.unread_count ?? 0;
+                  const online = presence(user.id);
                   return (
                     <li
                       key={user.id}
@@ -754,46 +784,35 @@ export const UserDirectory: React.FC = () => {
                           setMessageThreadUserId(null);
                         }
                       }}
-                      className={`flex items-center gap-3.5 px-3.5 py-3.5 cursor-pointer transition-colors duration-100 ${
+                      className={`flex items-center gap-3.5 px-3.5 py-4 cursor-pointer transition-colors duration-100 ${
                         isSelected
                           ? 'bg-[#FFF8F4] border-l-4 border-[#FFB380]'
                           : 'hover:bg-zinc-50 border-l-4 border-transparent'
                       }`}
                     >
-                      {/* Avatar */}
-                      <UserAvatar
-                        src={user.avatar}
-                        name={user.name}
-                        sizeClass="w-12 h-12 min-w-[48px] min-h-[48px]"
-                        textClass="font-black text-sm text-zinc-600 font-display"
-                      />
+                      <div className="relative shrink-0">
+                        <UserAvatar
+                          src={user.avatar}
+                          name={user.name}
+                          sizeClass="w-12 h-12 min-w-[48px] min-h-[48px]"
+                          textClass="font-black text-sm text-zinc-600 font-display"
+                        />
+                        {online !== undefined && (
+                          <span className="absolute bottom-0 right-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white ring-2 ring-white">
+                            <PresenceIndicator online={online} compact />
+                          </span>
+                        )}
+                      </div>
 
                       {/* Name + badges */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-sm font-bold font-display truncate text-[#0D0D11] ${isSelected ? 'font-black' : ''}`}>
+                          <span title={user.name} className={`text-sm font-display truncate text-[#0D0D11] ${isSelected || unread > 0 ? 'font-bold' : 'font-semibold'}`}>
                             {user.name}
                           </span>
                           {user.verified && (
-                            <CheckCircle className="w-3.5 h-3.5 fill-emerald-600 text-white shrink-0" />
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-                            {user.role === 'HOMEOWNER' 
-                              ? 'Homeowner' 
-                              : user.role === 'KASAMBAHAY' 
-                                ? 'Kasambahay' 
-                                : user.role === 'BARANGAY' 
-                                  ? `Brgy. ${cleanBarangayName(user.barangay)}` 
-                                  : 'City SuperAdmin'}
-                          </span>
-                          {user.hasLguCoverage === false && (
-                            <span
-                              className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0"
-                              title={`No LGU Account for ${user.barangay}`}
-                            >
-                              No LGU
+                            <span title="Verified" role="img" aria-label="Verified" className="shrink-0">
+                              <CheckCircle aria-hidden="true" className="w-3.5 h-3.5 fill-emerald-600 text-white" />
                             </span>
                           )}
                         </div>
@@ -841,8 +860,8 @@ export const UserDirectory: React.FC = () => {
             /* Chat Panel Active Thread */
             <div className="flex-1 flex flex-col h-full overflow-hidden">
               {/* Header */}
-              <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-zinc-100 flex items-center justify-between shrink-0 bg-white">
-                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="px-4 sm:px-5 py-4 border-b border-zinc-100 flex items-center gap-4 shrink-0 bg-white">
+                <div className="flex flex-1 items-center gap-3 min-w-0">
                   {/* Mobile Back Button to return to User List */}
                   <button
                     type="button"
@@ -857,34 +876,36 @@ export const UserDirectory: React.FC = () => {
                   <UserAvatar
                     src={threadPartner?.avatar}
                     name={threadPartner?.name || 'User'}
-                    sizeClass="w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] sm:min-w-[40px] min-h-[36px] sm:min-h-[40px]"
+                    sizeClass="w-10 h-10 min-w-[40px] min-h-[40px]"
                     textClass="font-black text-xs text-zinc-600 font-display"
                   />
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-black font-display text-[#0D0D11] truncate">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-semibold font-display leading-5 text-[#0D0D11] truncate" title={threadPartner?.name}>
                       {threadPartner?.name}
                     </h4>
-                    <p className="text-[11px] text-zinc-400 font-medium truncate">
-                      {threadPartner?.role === 'BARANGAY'
-                        ? `Barangay Officer · Brgy. ${cleanBarangayName(threadPartner?.barangay)}`
-                        : threadPartner?.role === 'SUPERADMIN'
-                          ? 'City Administration · SuperAdmin'
-                          : `${threadPartner?.role === 'HOMEOWNER' ? 'Homeowner' : 'Kasambahay'} · Barangay ${cleanBarangayName(threadPartner?.barangay) || 'General'}`}
-                    </p>
+                    <div className="mt-1 flex items-center gap-2 min-w-0 leading-4">
+                      <PresenceIndicator online={threadPresence} />
+                      {threadPresence !== undefined && <span aria-hidden="true" className="h-3 w-px shrink-0 bg-zinc-200" />}
+                      <span className="text-[11px] text-zinc-500 truncate">
+                        {threadPartner?.role === 'SUPERADMIN'
+                          ? 'City Administration'
+                          : `Brgy. ${cleanBarangayName(threadPartner?.barangay) || 'General'}`}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setMessageThreadUserId(null)}
-                  className="p-1.5 rounded-full text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-50 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200 transition-colors cursor-pointer"
                   title="Close conversation"
+                  aria-label="Close conversation"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Message List Area */}
-              {partnerTyping && <p role="status" className="px-4 py-2 text-xs text-zinc-500 bg-orange-50">{threadPartner?.name || 'Your contact'} is typing…</p>}
               <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#FAF9F6]">
                 {isChatLoading ? (
                   <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-2 py-12">
@@ -1061,6 +1082,13 @@ export const UserDirectory: React.FC = () => {
                         );
                       })
                     )}
+                    {partnerTyping && (
+                      <div role="status" aria-live="polite" aria-label="Typing" className="flex py-1">
+                        <span aria-hidden="true" className="inline-flex gap-1 rounded-2xl bg-white px-3 py-2">
+                          {[0, 1, 2].map(dot => <span key={dot} className="w-1.5 h-1.5 rounded-full bg-zinc-400 motion-safe:animate-bounce" style={{ animationDelay: `${dot * 150}ms` }} />)}
+                        </span>
+                      </div>
+                    )}
                     <div ref={chatEndRef} />
                   </>
                 )}
@@ -1115,7 +1143,9 @@ export const UserDirectory: React.FC = () => {
                               key={emoji}
                               type="button"
                               onClick={() => {
-                                setChatInput((prev) => prev + emoji);
+                                const value = chatInput + emoji;
+                                setChatInput(value);
+                                composerTyping.current?.change(value);
                                 setShowEmojiPicker(false);
                               }}
                               className="text-xl hover:scale-125 transition-transform cursor-pointer p-1 rounded-lg hover:bg-zinc-100"
@@ -1164,11 +1194,9 @@ export const UserDirectory: React.FC = () => {
                           value={chatInput}
                           onChange={e => {
                             setChatInput(e.target.value);
-                            if (messageThreadUserId && (!e.target.value || Date.now() - lastTypingSent.current > 2000)) {
-                              lastTypingSent.current = Date.now();
-                              void sendChatTyping(messageThreadUserId, Boolean(e.target.value)).catch(() => {});
-                            }
+                            composerTyping.current?.change(e.target.value);
                           }}
+                          onBlur={() => composerTyping.current?.stop()}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                               e.preventDefault();
