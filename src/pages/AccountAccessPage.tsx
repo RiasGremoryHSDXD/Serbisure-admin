@@ -4,6 +4,7 @@ import { useAdmin } from '../context/AdminContext';
 import { AccountAccessTable } from '../components/users/AccountAccessTable';
 import { accessPage, filterAccessUsers, type ResidentRoleFilter, type AccessFilter } from '../data/accountAccess';
 import { useAccountAccessUsers } from '../hooks/useAccountAccessUsers';
+import { AccountAccessHistory } from '../components/users/AccountAccessHistory';
 
 const field = 'w-full rounded-2xl bg-white px-4 py-3 text-sm text-zinc-700 outline-none focus-visible:ring-2 focus-visible:ring-[#FFB380]';
 const selectField = `${field} appearance-none pr-12`;
@@ -20,6 +21,8 @@ export function AccountAccessPage(): React.ReactElement {
   const [page, setPage] = useState(1);
   const [now, setNow] = useState(Date.now());
   const [saved, setSaved] = useState<{ scope: string; name: string } | null>(null);
+  const [view, setView] = useState<'accounts' | 'history'>('accounts');
+  const [historyRevision, setHistoryRevision] = useState(0);
   useEffect(() => { setSearch(''); setRole('ALL'); setAccess('ALL'); setPage(1); setSaved(null); }, [scope]);
   useEffect(() => { setPage(1); }, [search, role, access]);
   useEffect(() => {
@@ -44,8 +47,12 @@ export function AccountAccessPage(): React.ReactElement {
   return <section className="space-y-6 sm:space-y-8" aria-labelledby="account-access-title">
     <header className="flex items-start justify-between gap-6">
       <div><h1 id="account-access-title" className="text-2xl font-black font-display text-[#0D0D11]">Account Access</h1><p className="mt-2 text-sm text-zinc-500">Manage messaging and account suspensions.</p></div>
-      <button type="button" className={secondary} disabled={roster.loading} onClick={roster.refresh} aria-label="Refresh accounts"><RotateCw size={18} className={roster.loading ? 'animate-spin' : ''} /></button>
+      <button type="button" className={secondary} disabled={view === 'accounts' && roster.loading} onClick={() => view === 'accounts' ? roster.refresh() : setHistoryRevision(value => value + 1)} aria-label={view === 'accounts' ? 'Refresh accounts' : 'Refresh access history'}><RotateCw size={18} className={view === 'accounts' && roster.loading ? 'animate-spin' : ''} /></button>
     </header>
+    <nav aria-label="Account access views" className="flex w-fit gap-1 rounded-full bg-zinc-200/60 p-1">
+      {(['accounts', 'history'] as const).map(value => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)} className={`rounded-full px-5 py-2.5 text-sm font-semibold transition-colors ${view === value ? 'bg-[#0D0D11] text-white' : 'text-zinc-600 hover:bg-white/60'}`}>{value === 'accounts' ? 'Accounts' : 'Access history'}</button>)}
+    </nav>
+    {view === 'history' ? <AccountAccessHistory key={scope} accountId={currentUser?.id} role={currentRole} barangay={selectedBarangay} revision={historyRevision} /> : <>
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
       <label className="relative"><span className="sr-only">Search users or barangay</span><Search aria-hidden="true" size={18} className="pointer-events-none absolute left-4 top-3.5 text-zinc-400" /><input className={`${field} pl-12`} value={search} onChange={event => setSearch(event.target.value)} placeholder="Search name or barangay" /></label>
       <label><span className="sr-only">User type</span><div className="relative"><select className={selectField} value={role} onChange={event => setRole(event.target.value as ResidentRoleFilter)}><option value="ALL">All users</option><option value="HOMEOWNER">Homeowners</option><option value="KASAMBAHAY">Kasambahays</option></select><ChevronDown aria-hidden="true" size={18} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500" /></div></label>
@@ -62,5 +69,6 @@ export function AccountAccessPage(): React.ReactElement {
         </footer>
       </>}
     </div>
+    </>}
   </section>;
 }

@@ -25,17 +25,37 @@ import type { BookingCompliance, VerificationRequest, AuditLogEntry } from '../.
 
 const ITEMS_PER_PAGE = 5;
 
-function getPageNumbers(currentPage: number, totalPages: number): (number | string)[] {
-  if (totalPages <= 5) {
-    return Array.from({ length: totalPages }, (_, i) => i + 1);
-  }
-  if (currentPage <= 3) {
-    return [1, 2, 3, 4, '...', totalPages];
-  }
-  if (currentPage >= totalPages - 2) {
-    return [1, '...', totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
-  }
-  return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+interface CompactPaginationProps {
+  page: number;
+  totalPages: number;
+  onPrevious: () => void;
+  onNext: () => void;
+  label: string;
+}
+
+function CompactPagination({ page, totalPages, onPrevious, onNext, label }: CompactPaginationProps): React.ReactElement | null {
+  if (totalPages <= 1) return null;
+  return <nav aria-label={`${label} pages`} className="flex items-center gap-3">
+    <button
+      type="button"
+      onClick={onPrevious}
+      disabled={page <= 1}
+      className="flex h-10 w-12 items-center justify-center rounded-full bg-zinc-100 text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40"
+      aria-label={`Previous ${label.toLowerCase()} page`}
+    >
+      <ChevronLeft className="h-4 w-4" />
+    </button>
+    <span className="min-w-10 text-center text-xs font-medium text-zinc-500">{page} / {totalPages}</span>
+    <button
+      type="button"
+      onClick={onNext}
+      disabled={page >= totalPages}
+      className="flex h-10 w-12 items-center justify-center rounded-full bg-zinc-100 text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40"
+      aria-label={`Next ${label.toLowerCase()} page`}
+    >
+      <ChevronRight className="h-4 w-4" />
+    </button>
+  </nav>;
 }
 
 function formatAuditDate(dateStr?: string | null): string {
@@ -1048,46 +1068,13 @@ export const DashboardActivityTable: React.FC = () => {
                   <span className="font-bold text-zinc-900">{totalBookings}</span> placements
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setBookingsPage((p) => Math.max(1, p - 1))}
-                    disabled={safeBookingsPage <= 1}
-                    className="p-1.5 rounded-xl border border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
-                    title="Previous page"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-
-                  {getPageNumbers(safeBookingsPage, totalBookingPages).map((p, idx) => (
-                    p === '...' ? (
-                      <span key={`ellipsis-${idx}`} className="px-2 text-zinc-400 font-bold select-none">…</span>
-                    ) : (
-                      <button
-                        key={`page-${p}`}
-                        type="button"
-                        onClick={() => setBookingsPage(p as number)}
-                        className={`min-w-[32px] h-8 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
-                          safeBookingsPage === p
-                            ? 'bg-[#0D0D11] text-white shadow-xs'
-                            : 'bg-[#F0F0EC] text-zinc-700 hover:bg-[#EAEAE5] hover:text-zinc-900'
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    )
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => setBookingsPage((p) => Math.min(totalBookingPages, p + 1))}
-                    disabled={safeBookingsPage >= totalBookingPages}
-                    className="p-1.5 rounded-xl border border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
-                    title="Next page"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
+                <CompactPagination
+                  page={safeBookingsPage}
+                  totalPages={totalBookingPages}
+                  onPrevious={() => setBookingsPage((p) => Math.max(1, p - 1))}
+                  onNext={() => setBookingsPage((p) => Math.min(totalBookingPages, p + 1))}
+                  label="Placements"
+                />
               </div>
             </>
           )
@@ -1166,46 +1153,13 @@ export const DashboardActivityTable: React.FC = () => {
                   <span className="font-bold text-zinc-900">{totalVerifications}</span> clearances
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setVerificationsPage((p) => Math.max(1, p - 1))}
-                    disabled={safeVerifPage <= 1}
-                    className="p-1.5 rounded-xl border border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
-                    title="Previous page"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-
-                  {getPageNumbers(safeVerifPage, totalVerifPages).map((p, idx) => (
-                    p === '...' ? (
-                      <span key={`verif-ellipsis-${idx}`} className="px-2 text-zinc-400 font-bold select-none">…</span>
-                    ) : (
-                      <button
-                        key={`verif-page-${p}`}
-                        type="button"
-                        onClick={() => setVerificationsPage(p as number)}
-                        className={`min-w-[32px] h-8 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
-                          safeVerifPage === p
-                            ? 'bg-[#0D0D11] text-white shadow-xs'
-                            : 'bg-[#F0F0EC] text-zinc-700 hover:bg-[#EAEAE5] hover:text-zinc-900'
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    )
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => setVerificationsPage((p) => Math.min(totalVerifPages, p + 1))}
-                    disabled={safeVerifPage >= totalVerifPages}
-                    className="p-1.5 rounded-xl border border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
-                    title="Next page"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
+                <CompactPagination
+                  page={safeVerifPage}
+                  totalPages={totalVerifPages}
+                  onPrevious={() => setVerificationsPage((p) => Math.max(1, p - 1))}
+                  onNext={() => setVerificationsPage((p) => Math.min(totalVerifPages, p + 1))}
+                  label="Clearances"
+                />
               </div>
             </>
           )
@@ -1372,46 +1326,13 @@ export const DashboardActivityTable: React.FC = () => {
                   <span className="font-bold text-zinc-900">{totalAuditLogs}</span> audit events
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
-                    disabled={safeAuditPage <= 1}
-                    className="p-1.5 rounded-xl border border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
-                    title="Previous page"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-
-                  {getPageNumbers(safeAuditPage, totalAuditPages).map((p, idx) => (
-                    p === '...' ? (
-                      <span key={`audit-ellipsis-${idx}`} className="px-2 text-zinc-400 font-bold select-none">…</span>
-                    ) : (
-                      <button
-                        key={`audit-page-${p}`}
-                        type="button"
-                        onClick={() => setAuditPage(p as number)}
-                        className={`min-w-[32px] h-8 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
-                          safeAuditPage === p
-                            ? 'bg-[#0D0D11] text-white shadow-xs'
-                            : 'bg-[#F0F0EC] text-zinc-700 hover:bg-[#EAEAE5] hover:text-zinc-900'
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    )
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => setAuditPage((p) => Math.min(totalAuditPages, p + 1))}
-                    disabled={safeAuditPage >= totalAuditPages}
-                    className="p-1.5 rounded-xl border border-zinc-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
-                    title="Next page"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
+                <CompactPagination
+                  page={safeAuditPage}
+                  totalPages={totalAuditPages}
+                  onPrevious={() => setAuditPage((p) => Math.max(1, p - 1))}
+                  onNext={() => setAuditPage((p) => Math.min(totalAuditPages, p + 1))}
+                  label="Audit trail"
+                />
               </div>
             </>
           )
