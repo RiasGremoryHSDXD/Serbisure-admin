@@ -220,7 +220,7 @@ export async function sendChatMessage(
   messagePayload: string
 ): Promise<ChatMessage> {
   const idempotencyKey = crypto.randomUUID();
-  const res = await fetchApi<{ message: string; data: ChatMessage }>(
+  const res = await fetchApi<{ message: string; data: ChatMessage; language_warning?: string | null }>(
     '/api/v1/chat/send/',
     {
       method: 'POST',
@@ -228,7 +228,7 @@ export async function sendChatMessage(
       body: JSON.stringify({ receiver_id: receiverId, message_payload: messagePayload }),
     }
   );
-  return res.data;
+  return { ...res.data, language_warning: res.language_warning };
 }
 
 /**
@@ -251,7 +251,7 @@ export async function sendChatImageMessage(
     formData.append('message_payload', caption.trim());
   }
 
-  const res = await fetchApi<{ message: string; data: ChatMessage }>(
+  const res = await fetchApi<{ message: string; data: ChatMessage; language_warning?: string | null }>(
     '/api/v1/chat/send-image/',
     {
       method: 'POST',
@@ -259,7 +259,7 @@ export async function sendChatImageMessage(
       body: formData,
     }
   );
-  return res.data;
+  return { ...res.data, language_warning: res.language_warning };
 }
 
 /**

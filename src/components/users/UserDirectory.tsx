@@ -27,6 +27,8 @@ import { PresenceIndicator } from '../chat/PresenceIndicator';
 import { useChatPresence } from '../../hooks/useChatPresence';
 import { createChatTyping } from '../../data/chatTyping';
 import { getOptimizedWebpUrl } from '../../utils/imageOptimizer';
+import { useMessagingRestriction } from '../../hooks/useMessagingRestriction';
+import { AccountControls } from './AccountControls';
 
 function inboxRole(accountType: string): AccountRole {
   const value = accountType.toUpperCase();
@@ -208,6 +210,10 @@ export const UserDirectory: React.FC = () => {
 
   // Chat panel local state
   const [messageThreadUserId, setMessageThreadUserId] = useState<string | null>(null);
+  const sendGuard = useRef(false);
+  const sendThread = useRef({ id: messageThreadUserId, generation: 0 });
+  if (sendThread.current.id !== messageThreadUserId) sendThread.current = { id: messageThreadUserId, generation: sendThread.current.generation + 1 };
+  const restrictedUntil = useMessagingRestriction();
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [typingPartnerId, setTypingPartnerId] = useState<string | null>(null);
@@ -216,6 +222,8 @@ export const UserDirectory: React.FC = () => {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [languageNotice, setLanguageNotice] = useState<string | null>(null);
+  useEffect(() => { setLanguageNotice(null); }, [messageThreadUserId]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
@@ -366,7 +374,9 @@ export const UserDirectory: React.FC = () => {
   };
 
   const handleSendImage = async () => {
-    if (!messageThreadUserId || !imageFile || isSendingImage) return;
+    if (!messageThreadUserId || !imageFile || isSendingImage || sendGuard.current) return;
+    sendGuard.current = true;
+    const generation = sendThread.current.generation;
     composerTyping.current?.stop();
     const fileToSend = imageFile;
     const captionToSend = chatInput.trim();
@@ -375,20 +385,26 @@ export const UserDirectory: React.FC = () => {
     setChatError(null);
     try {
       const sent = await sendChatImageMessage(messageThreadUserId, fileToSend, captionToSend || undefined);
+      if (generation !== sendThread.current.generation) return;
       setChatMessages((prev) => [...prev, sent]);
+      setLanguageNotice(sent.language_warning || null);
       void refreshChatInbox(); // Re-sort the list after a new image message is sent
       setImageFile(null);
       setImagePreviewUrl(null);
       setChatInput('');
     } catch (err: any) {
+      if (generation !== sendThread.current.generation) return;
       setChatError(err?.message || 'Failed to send image. Please retry.');
     } finally {
+      sendGuard.current = false;
       setIsSendingImage(false);
     }
   };
 
   const handleSend = async () => {
-    if (!messageThreadUserId || !chatInput.trim() || isSending) return;
+    if (!messageThreadUserId || !chatInput.trim() || isSending || sendGuard.current) return;
+    sendGuard.current = true;
+    const generation = sendThread.current.generation;
     const payload = chatInput.trim();
     composerTyping.current?.stop();
     setChatInput('');
@@ -396,11 +412,16 @@ export const UserDirectory: React.FC = () => {
     setChatError(null);
     try {
       const sent = await sendChatMessage(messageThreadUserId, payload);
+      if (generation !== sendThread.current.generation) return;
       setChatMessages((prev) => [...prev, sent]);
+      setLanguageNotice(sent.language_warning || null);
       void refreshChatInbox(); // Re-sort the list after a new message is sent
     } catch (err: any) {
+      if (generation !== sendThread.current.generation) return;
       setChatError(err?.message || 'Failed to send message. Please retry.');
+      setChatInput(current => current || payload);
     } finally {
+      sendGuard.current = false;
       setIsSending(false);
     }
   };
@@ -579,6 +600,7 @@ export const UserDirectory: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-white">
+      {languageNotice && <div role="status" className="fixed bottom-6 right-6 z-[100] flex w-[calc(100%_-_3rem)] max-w-sm items-start gap-6 rounded-3xl bg-white p-6 text-sm leading-6 shadow-lg ring-1 ring-black/5"><p className="flex-1">Notice: {languageNotice}</p><button onClick={() => setLanguageNotice(null)} aria-label="Dismiss language notice" className="rounded-full p-2"><X size={18} /></button></div>}
       {/* Title & Filter Bar */}
       <div className="px-4 sm:px-6 py-3 sm:py-3.5 bg-white border-b border-zinc-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 shrink-0">
         <div>
@@ -1236,7 +1258,7 @@ export const UserDirectory: React.FC = () => {
                         </button>
                       </div>
                       <div className="text-[10px] text-zinc-400 text-right mt-1 px-1">
-                        Press Enter to send, Shift+Enter for new line
+                        {restrictedUntil ? `Messaging paused until ${new Date(restrictedUntil).toLocaleString()}. Your Barangay desk and SerbiSure Support remain available.` : 'Press Enter to send, Shift+Enter for new line'}
                       </div>
                     </>
                   )}
@@ -1310,6 +1332,10 @@ export const UserDirectory: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {selectedUser.canManageSuspension && ['BARANGAY', 'SUPERADMIN'].includes(selectedUser.role) && <div className="flex justify-center">
+                  <AccountControls key={selectedUser.id} userId={selectedUser.id} name={selectedUser.name} onSaved={() => { void refreshUsers(); }} />
+                </div>}
 
                 {/* Information Grid */}
                 <div className="grid grid-cols-2 gap-y-4 gap-x-4 pt-4 border-t border-zinc-100">

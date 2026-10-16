@@ -80,3 +80,15 @@ test('badges disappear at zero, cap visually at 99+ and retain exact accessible 
   const html = renderToStaticMarkup(React.createElement(UnreadBadge, { count: 105 }));
   assert.match(html, /105 unread messages/); assert.match(html, /99\+/);
 });
+
+
+test('resident access controls move to the table while authorized staff controls remain in staff profiles', () => {
+  state.currentRole = 'SUPERADMIN';
+  for (const [role, expected] of [['HOMEOWNER', false], ['BARANGAY', true]]) {
+    state.users = [{ id: 'person', name: 'Test Person', role, email: 'person@example.test',
+      avatar: '', barangay: 'Pagatpat', socialLinks: [], joinedDate: '2026-10-12', contactNumber: '', city: 'CDO', canManageSuspension: true }];
+    const { UserDirectory } = uiLoader()('src/components/users/UserDirectory.tsx');
+    const html = renderToStaticMarkup(React.createElement(UserDirectory));
+    assert.equal(html.includes('Manage access for Test Person'), expected);
+  }
+});

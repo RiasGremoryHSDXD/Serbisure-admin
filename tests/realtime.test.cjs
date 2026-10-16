@@ -20,6 +20,20 @@ test('mobile and web use identical tested WebSocket protocol clients', () => {
   const mobile = path.resolve(__dirname, '../../front_end_2/SerbiSure-Frontend/src/shared/realtime/RealtimeClient.ts');
   assert.equal(fs.readFileSync(web, 'utf8'), fs.readFileSync(mobile, 'utf8'));
 });
+
+test('moderation changes reconcile only after socket authentication and stop after logout', () => {
+  const f = fixture(); f.client.start('token');
+  const event = { data: JSON.stringify({ type: 'moderation.changed' }) };
+  f.sockets[0].onmessage(event);
+  assert.deepEqual(f.events, []);
+  f.ready();
+  f.sockets[0].onmessage(event);
+  assert.deepEqual(f.events.at(-1), { type: 'moderation.changed' });
+  const stale = f.sockets[0].onmessage;
+  f.client.stop();
+  stale(event);
+  assert.equal(f.events.length, 2);
+});
 test('JWT is sent as an auth frame, never in the URL; events wait for server authentication', () => {
   const f = fixture(); f.client.start('private-token');
   assert.equal(f.urls[0], 'wss://api.example.test/ws/events/'); assert.doesNotMatch(f.urls[0], /private-token/);

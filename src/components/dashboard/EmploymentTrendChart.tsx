@@ -32,7 +32,7 @@ export const EmploymentTrendChart: React.FC = () => {
   // Fetch trend data whenever activeBarangay changes
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true); setError(null); setChartData([]);
+    setIsLoading(true); setError(null); setChartData([]); setHoveredIdx(null);
 
     const bgyToFetch = activeBarangay === 'All Barangays' ? undefined : activeBarangay;
     fetchMonthlyTrend(bgyToFetch)
@@ -128,11 +128,11 @@ export const EmploymentTrendChart: React.FC = () => {
   }, [barangays, userBarangays]);
 
   return (
-    <div className="bg-white rounded-3xl p-6 sm:p-7 flex flex-col justify-between h-full relative shadow-sm border border-zinc-100">
+    <div className="bg-white rounded-3xl p-5 sm:p-7 min-w-0 flex flex-col justify-between h-full relative shadow-sm border border-zinc-100">
       {error && <p role="alert" className="mb-3 text-xs text-amber-800">{error}</p>}
       {!isLoading && !error && chartData.length === 0 && <p className="mb-3 text-xs text-zinc-500">No employment trend data yet.</p>}
       {/* Minimal Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+      <div className="flex flex-col gap-3 mb-4 min-w-0">
         <div className="flex items-center gap-2.5">
           <h3 className="text-lg font-black font-display text-[#0D0D11] tracking-tight">
             Employment Trends
@@ -146,13 +146,15 @@ export const EmploymentTrendChart: React.FC = () => {
         </div>
 
         {/* Legend & Barangay Filter */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 min-w-0">
           {/* Barangay Selector */}
-          <div className="relative">
+          <div className="relative min-w-0 max-w-full">
             <select
               value={activeBarangay}
               onChange={(e) => setActiveBarangay(e.target.value)}
-              className="appearance-none bg-[#F4F4F0] hover:bg-[#EAEAE5] text-zinc-800 text-xs font-black font-display py-1.5 pl-3 pr-7 rounded-full border border-zinc-200/60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-colors"
+              aria-label="Filter employment trends by barangay"
+              title={activeBarangay === 'All Barangays' ? 'All CDO Barangays' : `Brgy. ${activeBarangay}`}
+              className="appearance-none max-w-full truncate bg-[#F4F4F0] hover:bg-[#EAEAE5] text-zinc-800 text-xs font-bold font-display py-1.5 pl-3 pr-7 rounded-full border border-zinc-200/60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-colors"
             >
               {barangayOptions.map((bgy) => (
                 <option key={bgy} value={bgy}>
@@ -163,11 +165,10 @@ export const EmploymentTrendChart: React.FC = () => {
             <ChevronDown className="w-3.5 h-3.5 text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
 
-          {/* Interactive Legend Pills */}
-          <div className="flex items-center gap-3 text-xs font-bold text-zinc-600 bg-zinc-50 px-3 py-1.5 rounded-full border border-zinc-200/60">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-medium text-zinc-600">
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-[#F97316]" />
-              <span>On the Job</span>
+              <span className="whitespace-nowrap">On the Job</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-[#0D0D11]" />
@@ -180,10 +181,10 @@ export const EmploymentTrendChart: React.FC = () => {
 
 
       {/* SVG Bar Graph */}
-      <div className="relative w-full overflow-hidden mt-1">
+      <div className="relative w-full min-w-0 min-h-[190px] overflow-hidden mt-1">
         <svg
           viewBox={`0 0 ${width} ${height}`}
-          className="w-full h-auto overflow-visible select-none"
+          className="w-full h-auto min-h-[190px] overflow-visible select-none"
           onMouseLeave={() => setHoveredIdx(null)}
         >
           <defs>
@@ -354,23 +355,19 @@ export const EmploymentTrendChart: React.FC = () => {
 
         {hoveredIdx !== null && activeHoverIdx !== null && activeHoverPoint && (
           <div
-            className="absolute z-20 pointer-events-none transition-all duration-150 bg-[#0D0D11] text-white p-3 rounded-2xl text-xs w-44 ring-1 ring-white/10 shadow-xl"
+            className="absolute z-20 pointer-events-none transition-all duration-150 bg-[#0D0D11] text-white p-3 rounded-2xl text-xs ring-1 ring-white/10 shadow-xl"
             style={{
-              left: `${Math.min(
-                72,
-                Math.max(
-                  8,
-                  ((paddingLeft + (activeHoverIdx + 0.5) * slotWidth) / width) * 100 - 18
-                )
-              )}%`,
+              width: 'min(11rem, calc(100% - 16px))',
+              // Use the tooltip's actual width to keep both edges inside the chart.
+              left: `clamp(8px, calc(${((paddingLeft + (activeHoverIdx + 0.5) * slotWidth) / width) * 100}% - 5.5rem), max(8px, calc(100% - 11rem - 8px)))`,
               top: '12%',
             }}
           >
-            <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-800">
+            <div className="flex flex-col items-start gap-1 pb-1.5 mb-1.5 border-b border-zinc-800 min-w-0">
               <span className="font-black font-display text-[#FFB380] uppercase tracking-wider text-[10px]">
                 {activeHoverPoint.month} {activeHoverPoint.year || 2026}
               </span>
-              <span className="text-[9px] text-zinc-400 font-semibold px-1.5 py-0.5 bg-zinc-800 rounded">
+              <span title={activeBarangay} className="max-w-full truncate text-[9px] text-zinc-400 font-medium">
                 {activeBarangay === 'All Barangays' ? 'All CDO' : `Brgy. ${activeBarangay}`}
               </span>
             </div>

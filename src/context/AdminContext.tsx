@@ -467,59 +467,16 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     purgeAdminStorage();
   };
 
-  const approveVerification = async (id: string) => {
-    // A server-confirmed decision applies to this document only.
-    await reviewVerification(id, 'approve');
+  const reviewDocument = async (id: string, action: 'approve' | 'reject' | 'reset', reason?: string) => {
+    const result = await reviewVerification(id, action, reason, currentUser?.email || currentUser?.username);
+    // Only the selected document changes, after the server confirms its audit-backed decision.
+    setVerifications(previous => previous.map(item => item.id === id ? { ...item, ...result.document } : item));
     await Promise.all([refreshVerifications(), refreshAuditLogs()]);
   };
 
-  const rejectVerification = async (id: string, reason?: string) => {
-    // Optimistic UI update supporting targeted primary or secondary document rejection
-    setVerifications((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          return { ...item, status: 'REJECTED', primaryStatus: 'REJECTED', notes: reason };
-        }
-        if (item.secondaryDocumentId === id) {
-          return { ...item, status: 'REJECTED', secondaryStatus: 'REJECTED', secondaryNotes: reason };
-        }
-        return item;
-      })
-    );
-
-    // Call live backend endpoint with reviewer identity
-    try {
-      await reviewVerification(id, 'reject', reason, currentUser?.email || currentUser?.username);
-      await Promise.all([refreshVerifications(), refreshAuditLogs()]);
-    } catch (err) {
-      console.warn('[Admin API] Reject sync note:', err);
-    }
-  };
-
-  const resetVerification = async (id: string) => {
-    // Optimistic UI update supporting targeted primary or secondary document reset
-    setVerifications((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const overallStatus = item.secondaryStatus === 'REJECTED' ? 'REJECTED' : 'PENDING / REVIEW';
-          return { ...item, status: overallStatus, primaryStatus: 'PENDING / REVIEW', notes: undefined };
-        }
-        if (item.secondaryDocumentId === id) {
-          const overallStatus = item.primaryStatus === 'REJECTED' ? 'REJECTED' : (item.primaryStatus || 'PENDING / REVIEW');
-          return { ...item, status: overallStatus, secondaryStatus: 'PENDING / REVIEW', secondaryNotes: undefined };
-        }
-        return item;
-      })
-    );
-
-    // Call live backend endpoint with reviewer identity
-    try {
-      await reviewVerification(id, 'reset', undefined, currentUser?.email || currentUser?.username);
-      await Promise.all([refreshVerifications(), refreshAuditLogs()]);
-    } catch (err) {
-      console.warn('[Admin API] Reset sync note:', err);
-    }
-  };
+  const approveVerification = (id: string) => reviewDocument(id, 'approve');
+  const rejectVerification = (id: string, reason?: string) => reviewDocument(id, 'reject', reason);
+  const resetVerification = (id: string) => reviewDocument(id, 'reset');
 
   const openComparisonModal = useCallback((id?: string) => {
     if (id) {

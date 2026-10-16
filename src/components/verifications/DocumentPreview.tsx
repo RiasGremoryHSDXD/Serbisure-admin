@@ -3,11 +3,13 @@ import { Eye, CheckCircle, XCircle, AlertTriangle, X, FileText, RotateCcw, Rotat
 import { useAdmin } from '../../context/AdminContext';
 import { IdentityComparisonModal } from './IdentityComparisonModal';
 import { getOptimizedWebpUrl } from '../../utils/imageOptimizer';
+import { groupVerificationApplicants } from '../../data/verificationApplicants';
 
 export const DocumentPreview: React.FC = () => {
   const { 
     verifications, 
     selectedVerificationId, 
+    setSelectedVerificationId,
     approveVerification, 
     rejectVerification, 
     resetVerification,
@@ -21,12 +23,14 @@ export const DocumentPreview: React.FC = () => {
   const [imageRotation, setImageRotation] = useState<number>(0);
   const [copiedNumber, setCopiedNumber] = useState<boolean>(false);
 
-  const selectedItem = verifications.find(v => v.id === selectedVerificationId) || verifications[0];
+  const selectedItem = verifications.find(v => v.id === selectedVerificationId);
 
   useEffect(() => {
     setIdSide('front');
     setImageRotation(0);
     setCopiedNumber(false);
+    setRejectReason('');
+    setFeedbackMessage(null);
   }, [selectedVerificationId]);
 
   if (!selectedItem) {
@@ -38,6 +42,8 @@ export const DocumentPreview: React.FC = () => {
   }
 
   const isUnsubmitted = selectedItem.status === 'NO_DOCUMENTS' || selectedItem.hasDocuments === false;
+  const applicantDocuments = groupVerificationApplicants(verifications).find(applicant =>
+    applicant.user.id === selectedItem.id || applicant.documents.some(document => document.id === selectedItem.id))?.documents || [];
 
   if (isUnsubmitted) {
     const isKasambahay = selectedItem.role === 'KASAMBAHAY';
@@ -270,7 +276,10 @@ export const DocumentPreview: React.FC = () => {
         isOpen={isComparisonModalOpen}
         onClose={() => setIsComparisonModalOpen(false)}
         hasDocuments={false}
+        documents={applicantDocuments}
+        onDocumentChange={setSelectedVerificationId}
         user={{
+          id: selectedItem.userId,
           name: selectedItem.name,
           role: selectedItem.role,
           email: selectedItem.email,
@@ -310,9 +319,13 @@ export const DocumentPreview: React.FC = () => {
   };
 
   const handleRejectById = async (targetId: string, reason?: string, docLabel?: string) => {
-    await rejectVerification(targetId, reason || 'Document criteria not met');
-    setFeedbackMessage(`Rejected ${selectedItem.name}'s ${docLabel || 'document'}`);
-    setRejectReason('');
+    try {
+      await rejectVerification(targetId, reason || 'Document criteria not met');
+      setFeedbackMessage(`Rejected ${selectedItem.name}'s ${docLabel || 'document'}`);
+      setRejectReason('');
+    } catch {
+      setFeedbackMessage('Rejection could not be saved. Please try again.');
+    }
     setTimeout(() => setFeedbackMessage(null), 3000);
   };
 
@@ -325,8 +338,12 @@ export const DocumentPreview: React.FC = () => {
   };
 
   const handleResetById = async (targetId: string, docLabel?: string) => {
-    await resetVerification(targetId);
-    setFeedbackMessage(`Reset ${selectedItem.name}'s ${docLabel || 'document'} to Pending Review`);
+    try {
+      await resetVerification(targetId);
+      setFeedbackMessage(`Reset ${selectedItem.name}'s ${docLabel || 'document'} to Pending Review`);
+    } catch {
+      setFeedbackMessage('Reset could not be saved. Please try again.');
+    }
     setTimeout(() => setFeedbackMessage(null), 3000);
   };
 
@@ -857,21 +874,21 @@ export const DocumentPreview: React.FC = () => {
 
       {/* Full-Screen Zoom Modal for Cloudinary Document Scan */}
       {showImageModal && activeImageUrl && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="relative max-w-4xl w-full bg-white rounded-3xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="p-4 bg-[#0D0D11] text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center p-4">
+          <div className="relative max-w-4xl w-full bg-[#F6F5F2] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="p-4 bg-white border-b border-zinc-200/70 text-zinc-950 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div>
                   <h4 className="font-black font-display text-sm">{selectedItem.name} — {selectedItem.documentType}</h4>
-                  <p className="text-[11px] text-zinc-400 font-medium">Authenticated Scan</p>
+                  <p className="text-[11px] text-zinc-500 font-medium">Authenticated Scan</p>
                 </div>
                 {hasSecondary && (
-                  <div className="flex items-center gap-1 bg-zinc-800 p-1 rounded-full">
+                  <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-full">
                     <button
                       type="button"
                       onClick={() => { setIdSide('front'); setImageRotation(0); }}
                       className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                        idSide === 'front' ? 'bg-white text-zinc-900' : 'text-zinc-300 hover:text-white'
+                        idSide === 'front' ? 'bg-white text-zinc-900' : 'text-zinc-600 hover:text-zinc-900'
                       }`}
                     >
                       {primaryDocLabel}
@@ -880,7 +897,7 @@ export const DocumentPreview: React.FC = () => {
                       type="button"
                       onClick={() => { setIdSide('back'); setImageRotation(0); }}
                       className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                        idSide === 'back' ? 'bg-white text-zinc-900' : 'text-zinc-300 hover:text-white'
+                        idSide === 'back' ? 'bg-white text-zinc-900' : 'text-zinc-600 hover:text-zinc-900'
                       }`}
                     >
                       {secondaryDocLabel}
@@ -893,7 +910,7 @@ export const DocumentPreview: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setImageRotation((prev) => (prev + 90) % 360)}
-                  className="px-3 py-1.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                  className="px-3 py-1.5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-600 text-xs font-bold flex items-center gap-1 cursor-pointer"
                   title="Rotate Scan 90°"
                 >
                   <RotateCw className="w-3.5 h-3.5" />
@@ -902,13 +919,13 @@ export const DocumentPreview: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowImageModal(false)}
-                  className="p-1.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white cursor-pointer"
+                  className="p-1.5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-500 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
-            <div className="p-4 max-h-[80vh] overflow-auto flex items-center justify-center bg-[#0D0D11]">
+            <div className="p-4 max-h-[80vh] overflow-auto flex items-center justify-center bg-zinc-100">
               <img
                 src={activeImageUrl}
                 alt={`Document Full Scan ${idSide}`}
@@ -924,7 +941,10 @@ export const DocumentPreview: React.FC = () => {
       <IdentityComparisonModal
         isOpen={isComparisonModalOpen}
         onClose={() => setIsComparisonModalOpen(false)}
+        documents={applicantDocuments}
+        onDocumentChange={setSelectedVerificationId}
         user={{
+          id: selectedItem.userId,
           name: selectedItem.name,
           role: selectedItem.role,
           email: selectedItem.email,
@@ -959,21 +979,9 @@ export const DocumentPreview: React.FC = () => {
           validityDate: selectedItem.validityDate,
           ocrExtractedData: selectedItem.ocrExtractedData,
         }}
-        onApprove={selectedItem.status !== 'VERIFIED' ? (targetDocId) => {
-          const targetId = targetDocId || (idSide === 'back' && selectedItem.secondaryDocumentId ? selectedItem.secondaryDocumentId : selectedItem.id);
-          const targetLabel = targetId === selectedItem.secondaryDocumentId ? secondaryDocLabel : primaryDocLabel;
-          handleApproveById(targetId, targetLabel);
-        } : undefined}
-        onReject={(reason, documentId) => {
-          const targetId = documentId || (idSide === 'back' && selectedItem.secondaryDocumentId ? selectedItem.secondaryDocumentId : selectedItem.id);
-          const targetLabel = targetId === selectedItem.secondaryDocumentId ? secondaryDocLabel : primaryDocLabel;
-          handleRejectById(targetId, reason, targetLabel);
-        }}
-        onReset={(documentId) => {
-          const targetId = documentId || (idSide === 'back' && selectedItem.secondaryDocumentId ? selectedItem.secondaryDocumentId : selectedItem.id);
-          const targetLabel = targetId === selectedItem.secondaryDocumentId ? secondaryDocLabel : primaryDocLabel;
-          handleResetById(targetId, targetLabel);
-        }}
+        onApprove={documentId => approveVerification(documentId || selectedItem.id)}
+        onReject={(reason, documentId) => rejectVerification(documentId || selectedItem.id, reason)}
+        onReset={documentId => resetVerification(documentId || selectedItem.id)}
       />
     </>
   );

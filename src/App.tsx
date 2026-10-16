@@ -5,6 +5,7 @@ import { Header } from './components/layout/Header';
 import { DashboardPage } from './pages/DashboardPage';
 import { VerificationsPage } from './pages/VerificationsPage';
 import { UsersPage } from './pages/UsersPage';
+import { AccountAccessPage } from './pages/AccountAccessPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { LoginPage } from './pages/LoginPage';
 
@@ -44,6 +45,7 @@ const MainLayout: React.FC = () => {
           {activeNav === 'dashboard' && <DashboardPage />}
           {activeNav === 'verifications' && <VerificationsPage />}
           {activeNav === 'users' && <UsersPage />}
+          {activeNav === 'account-access' && <AccountAccessPage />}
           {activeNav === 'settings' && <SettingsPage />}
         </main>
       </div>

@@ -1,5 +1,5 @@
 export type RealtimeStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'unauthorized';
-export type RealtimeEvent = { type: 'sync' | 'chat.changed' | 'chat.typing' | 'presence.changed' | 'booking.changed' | 'notifications.changed'; partner_id?: string; message_id?: string; booking_id?: string; is_typing?: boolean; is_online?: boolean | null; expires_in?: number };
+export type RealtimeEvent = { type: 'sync' | 'chat.changed' | 'chat.typing' | 'presence.changed' | 'booking.changed' | 'notifications.changed' | 'moderation.changed'; partner_id?: string; message_id?: string; booking_id?: string; is_typing?: boolean; is_online?: boolean | null; expires_in?: number };
 export interface SocketLike {
   onopen: ((event: any) => void) | null;
   onmessage: ((event: any) => void) | null;
@@ -89,7 +89,7 @@ export class RealtimeClient {
           if (Date.now() - this.lastSeen > 65000) { reconnect(); return; }
           try { socket.send(JSON.stringify({ type: 'ping' })); } catch { reconnect(); }
         }, 25000);
-      } else if (this.status === 'connected' && ['chat.changed', 'chat.typing', 'presence.changed', 'booking.changed', 'notifications.changed'].includes(data.type)) {
+      } else if (this.status === 'connected' && ['chat.changed', 'chat.typing', 'presence.changed', 'booking.changed', 'notifications.changed', 'moderation.changed'].includes(data.type)) {
         this.events.forEach(listener => listener(data as RealtimeEvent));
       }
     };
