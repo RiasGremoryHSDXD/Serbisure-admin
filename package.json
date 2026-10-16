@@ -8,8 +8,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test:chat": "node --test tests/chat-inbox.test.cjs",
-    "test:dashboard": "node --test tests/dashboard-data.test.cjs"
+    "test:chat": "node --test tests/chat-inbox.test.cjs tests/chat-typing.test.cjs tests/chat-presence.test.cjs",
+    "test:dashboard": "node --test tests/dashboard-data.test.cjs",
+    "test:verifications": "node --test tests/verification-applicants.test.cjs tests/image-viewport.test.cjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

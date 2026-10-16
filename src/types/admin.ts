@@ -50,6 +50,7 @@ export interface VerificationRequest {
   rawDocumentType?: string;
   documentNumber: string;
   submittedDate: string;
+  submittedAt?: string;
   issuedDate: string;
   validityDate: string;
   status: VerificationStatus;
@@ -151,6 +152,7 @@ export interface SocialLink {
 }
 
 export interface UserProfile {
+  canManageSuspension?: boolean;
   id: string;
   name: string;
   role: AccountRole;
@@ -232,6 +234,7 @@ export interface AuditLogEntry {
 }
 
 export interface ChatMessage {
+  language_warning?: string | null;
   chat_message_id: string;
   sender_id: string;
   receiver_id: string;

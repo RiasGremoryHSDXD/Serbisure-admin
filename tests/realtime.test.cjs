@@ -20,6 +20,20 @@ test('mobile and web use identical tested WebSocket protocol clients', () => {
   const mobile = path.resolve(__dirname, '../../front_end_2/SerbiSure-Frontend/src/shared/realtime/RealtimeClient.ts');
   assert.equal(fs.readFileSync(web, 'utf8'), fs.readFileSync(mobile, 'utf8'));
 });
+
+test('moderation changes reconcile only after socket authentication and stop after logout', () => {
+  const f = fixture(); f.client.start('token');
+  const event = { data: JSON.stringify({ type: 'moderation.changed' }) };
+  f.sockets[0].onmessage(event);
+  assert.deepEqual(f.events, []);
+  f.ready();
+  f.sockets[0].onmessage(event);
+  assert.deepEqual(f.events.at(-1), { type: 'moderation.changed' });
+  const stale = f.sockets[0].onmessage;
+  f.client.stop();
+  stale(event);
+  assert.equal(f.events.length, 2);
+});
 test('JWT is sent as an auth frame, never in the URL; events wait for server authentication', () => {
   const f = fixture(); f.client.start('private-token');
   assert.equal(f.urls[0], 'wss://api.example.test/ws/events/'); assert.doesNotMatch(f.urls[0], /private-token/);
@@ -58,4 +72,21 @@ test('heartbeat pings detect a stale server and reconnect', t => {
   t.mock.timers.tick(25000); assert.equal(f.sockets[0].sent.at(-1).type, 'ping');
   t.mock.timers.tick(50000); assert.equal(f.client.status, 'reconnecting');
   assert.equal(f.sockets[0].closed, true); f.client.stop();
+});
+
+test('presence subscriptions reconcile after authentication and reconnect, with independent consumer cleanup', t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const f = fixture();
+  const first = f.client.watchPresence(['one', 'two']);
+  const second = f.client.watchPresence(['two', 'three']);
+  f.client.start('token'); f.ready();
+  assert.deepEqual(f.sockets[0].sent.at(-1), { type: 'presence.watch', partner_ids: ['one', 'two', 'three'] });
+  f.sockets[0].onmessage({ data: JSON.stringify({ type: 'presence.changed', partner_id: 'two', is_online: false }) });
+  assert.equal(f.events.at(-1).is_online, false);
+  first();
+  assert.deepEqual(f.sockets[0].sent.at(-1).partner_ids, ['two', 'three']);
+  f.sockets[0].onclose({ code: 1006 }); t.mock.timers.tick(1600); f.ready();
+  assert.deepEqual(f.sockets[1].sent.at(-1).partner_ids, ['two', 'three']);
+  second(); assert.deepEqual(f.sockets[1].sent.at(-1).partner_ids, []);
+  f.client.stop();
 });

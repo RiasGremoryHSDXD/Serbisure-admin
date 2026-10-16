@@ -3,6 +3,9 @@ import { ChevronDown, ChevronLeft, ChevronRight, FileText, RotateCw, Clock, Chec
 import { useAdmin } from '../../context/AdminContext';
 import { AccountRole } from '../../types/admin';
 import { getOptimizedWebpUrl } from '../../utils/imageOptimizer';
+import { groupVerificationApplicants, preferredDocument } from '../../data/verificationApplicants';
+import { VerificationStatusBadge } from './VerificationStatusBadge';
+import { VerificationDocumentRow } from './VerificationDocumentRow';
 
 type StatusFilter = 'PENDING' | 'VERIFIED' | 'REJECTED' | 'NO_DOCUMENTS' | 'ALL';
 
@@ -12,6 +15,10 @@ export const VerificationQueue: React.FC = () => {
     selectedVerificationId, 
     setSelectedVerificationId,
     openComparisonModal,
+    isComparisonModalOpen,
+    approveVerification,
+    rejectVerification,
+    resetVerification,
     isLoadingVerifications,
     refreshVerifications,
     currentRole,
@@ -23,6 +30,7 @@ export const VerificationQueue: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState<'ALL' | AccountRole>('ALL');
   const [barangayFilter, setBarangayFilter] = useState<string>('ALL');
   const [sortOrder, setSortOrder] = useState<'RECENT' | 'OLDEST'>('RECENT');
+  const [expandedApplicantId, setExpandedApplicantId] = useState<string | null>(null);
 
   // Helper to normalize barangay strings
   const cleanBarangayName = (name?: string) => {
@@ -80,13 +88,15 @@ export const VerificationQueue: React.FC = () => {
       })
     : scopedVerifications;
 
-  const pendingCount = barangayScopedVerifications.filter(v => v.status === 'PENDING / REVIEW').length;
-  const verifiedCount = barangayScopedVerifications.filter(v => v.status === 'VERIFIED').length;
-  const rejectedCount = barangayScopedVerifications.filter(v => v.status === 'REJECTED').length;
-  const noDocumentsCount = barangayScopedVerifications.filter(v => v.status === 'NO_DOCUMENTS').length;
-  const totalCount = barangayScopedVerifications.length;
+  const applicants = groupVerificationApplicants(barangayScopedVerifications)
+    .filter(applicant => roleFilter === 'ALL' || applicant.user.role === roleFilter);
+  const pendingCount = applicants.filter(v => v.status === 'PENDING / REVIEW').length;
+  const verifiedCount = applicants.filter(v => v.status === 'VERIFIED').length;
+  const rejectedCount = applicants.filter(v => v.status === 'REJECTED').length;
+  const noDocumentsCount = applicants.filter(v => v.status === 'NO_DOCUMENTS').length;
+  const totalCount = applicants.length;
 
-  const filteredVerifications = barangayScopedVerifications
+  const filteredVerifications = applicants
     .filter(v => {
       // Status filter
       if (statusFilter === 'PENDING' && v.status !== 'PENDING / REVIEW') return false;
@@ -94,14 +104,11 @@ export const VerificationQueue: React.FC = () => {
       if (statusFilter === 'REJECTED' && v.status !== 'REJECTED') return false;
       if (statusFilter === 'NO_DOCUMENTS' && v.status !== 'NO_DOCUMENTS') return false;
 
-      // Role filter
-      if (roleFilter !== 'ALL' && v.role !== roleFilter) return false;
-
       return true;
     })
     .sort((a, b) => {
-      const dateA = new Date(a.submittedDate).getTime() || 0;
-      const dateB = new Date(b.submittedDate).getTime() || 0;
+      const dateA = a.submittedAt;
+      const dateB = b.submittedAt;
       return sortOrder === 'RECENT' ? dateB - dateA : dateA - dateB;
     });
 
@@ -116,6 +123,7 @@ export const VerificationQueue: React.FC = () => {
   // Reset pagination to page 1 whenever any filter or sorting criteria changes
   useEffect(() => {
     setCurrentPage(1);
+    setExpandedApplicantId(null);
   }, [statusFilter, roleFilter, barangayFilter, sortOrder, selectedBarangay]);
 
   // Idiot-proof clamp: If currentPage is somehow greater than totalPages, clamp safely
@@ -132,13 +140,17 @@ export const VerificationQueue: React.FC = () => {
 
   // Auto-select first item on the current page if current selection is not visible on this page
   useEffect(() => {
+    if (isComparisonModalOpen) return;
     if (paginatedVerifications.length > 0) {
-      const isVisibleOnPage = paginatedVerifications.some(v => v.id === selectedVerificationId);
+      const isVisibleOnPage = paginatedVerifications.some(applicant =>
+        applicant.user.id === selectedVerificationId || applicant.documents.some(document => document.id === selectedVerificationId));
       if (!isVisibleOnPage) {
-        setSelectedVerificationId(paginatedVerifications[0].id);
+        setSelectedVerificationId(preferredDocument(paginatedVerifications[0]).id);
       }
+    } else if (selectedVerificationId) {
+      setSelectedVerificationId('');
     }
-  }, [paginatedVerifications, selectedVerificationId, setSelectedVerificationId]);
+  }, [paginatedVerifications, selectedVerificationId, setSelectedVerificationId, isComparisonModalOpen]);
 
   // Generate page numbers with ellipsis for large page counts
   const getPageNumbers = () => {
@@ -174,10 +186,10 @@ export const VerificationQueue: React.FC = () => {
               </span>
             )}
             {statusFilter === 'PENDING' 
-              ? `${pendingCount} document${pendingCount === 1 ? '' : 's'} awaiting review`
+              ? `${pendingCount} applicant${pendingCount === 1 ? '' : 's'} awaiting review`
               : statusFilter === 'NO_DOCUMENTS'
               ? `${noDocumentsCount} user${noDocumentsCount === 1 ? '' : 's'} without documents`
-              : `${filteredVerifications.length} record${filteredVerifications.length === 1 ? '' : 's'} listed`}
+              : `${filteredVerifications.length} applicant${filteredVerifications.length === 1 ? '' : 's'} listed`}
           </p>
         </div>
 
@@ -308,7 +320,7 @@ export const VerificationQueue: React.FC = () => {
               onClick={() => setStatusFilter('ALL')}
               className="mt-4 px-5 py-2 rounded-full bg-[#0D0D11] text-white text-xs font-bold font-display hover:bg-black transition-all cursor-pointer"
             >
-              View All Records ({totalCount})
+              View All Applicants ({totalCount})
             </button>
           )}
         </div>
@@ -318,40 +330,49 @@ export const VerificationQueue: React.FC = () => {
             <thead>
               <tr className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 font-display">
                 <th className="py-2.5 px-2.5">User & Role</th>
-                <th className="py-2.5 px-2.5">Document</th>
+                <th className="py-2.5 px-2.5">Documents</th>
                 <th className="py-2.5 px-2.5">Submitted</th>
                 <th className="py-2.5 px-2.5 text-right">Status</th>
               </tr>
             </thead>
             <tbody className="text-xs space-y-1">
-              {paginatedVerifications.map((item) => {
-                const isSelected = selectedVerificationId === item.id;
-                const isUnsubmitted = item.status === 'NO_DOCUMENTS' || item.hasDocuments === false;
-                const displayStatus = item.status === 'PENDING / REVIEW' 
-                  ? 'In Review' 
-                  : item.status === 'VERIFIED' 
-                  ? 'Verified' 
-                  : item.status === 'REJECTED' 
-                  ? 'Rejected' 
-                  : 'Not Submitted';
+              {paginatedVerifications.map((applicant) => {
+                const item = applicant.user;
+                const isSelected = item.id === selectedVerificationId || applicant.documents.some(document => document.id === selectedVerificationId);
+                const isUnsubmitted = applicant.documents.length === 0;
+                const isExpanded = expandedApplicantId === applicant.id;
+                const toggleApplicant = () => {
+                  setSelectedVerificationId(preferredDocument(applicant).id);
+                  setExpandedApplicantId(isExpanded ? null : applicant.id);
+                };
+                const reviewApplicant = () => {
+                  setExpandedApplicantId(applicant.id);
+                  openComparisonModal(preferredDocument(applicant).id);
+                };
 
                 return (
+                  <React.Fragment key={applicant.id}>
                   <tr
-                    key={item.id}
-                    onClick={() => {
-                      setSelectedVerificationId(item.id);
-                      openComparisonModal(item.id);
-                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isExpanded}
+                    aria-controls={`applicant-documents-${applicant.id}`}
+                    aria-label={`${item.name}, ${applicant.documents.length} documents. Open applicant review`}
+                    onClick={reviewApplicant}
+                    onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); reviewApplicant(); } }}
                     className={`cursor-pointer transition-colors ${
                       isSelected
                         ? 'bg-zinc-100 text-zinc-950'
                         : 'hover:bg-zinc-50/80 text-zinc-700'
                     }`}
-                    title={isUnsubmitted ? "Click to view resident profile photo & details" : "Click to inspect Face & Identity comparison"}
+                    title="Open photo and document comparison"
                   >
                     {/* User & Role */}
                     <td className="py-2.5 px-2.5 rounded-l-2xl whitespace-nowrap">
                       <div className="flex items-center gap-2.5">
+                        <button type="button" aria-label={`${isExpanded ? 'Collapse' : 'Expand'} documents for ${item.name}`} aria-expanded={isExpanded} onClick={event => { event.stopPropagation(); toggleApplicant(); }} className="shrink-0 rounded-lg p-1 text-zinc-400 hover:bg-zinc-200 focus-visible:ring-2 focus-visible:ring-orange-200">
+                          <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
                         <div className="w-8 h-8 min-w-[32px] min-h-[32px] rounded-full overflow-hidden shrink-0 bg-zinc-100 flex items-center justify-center">
                           {item.avatar ? (
                             <img
@@ -405,52 +426,42 @@ export const VerificationQueue: React.FC = () => {
                         <div className="flex items-center gap-1.5">
                           <FileText className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                           <span className="font-medium text-xs text-zinc-800">
-                            {item.isPackage ? (item.packageLabel || item.documentType) : item.documentType}
+                            {applicant.documents.length} {applicant.documents.length === 1 ? 'document' : 'documents'}
                           </span>
-                          {item.isPackage && (
-                            <span className="text-[10px] text-zinc-400 font-normal">
-                              · 2 docs
-                            </span>
-                          )}
                         </div>
                       )}
                     </td>
 
                     {/* Submitted Date */}
-                    <td className="py-2.5 px-2.5 text-xs font-medium text-zinc-400 whitespace-nowrap" title={item.submittedDate}>
-                      {isUnsubmitted ? '—' : item.submittedDate.split(' ').slice(0, 3).join(' ')}
+                    <td className="py-2.5 px-2.5 text-xs font-medium text-zinc-400 whitespace-nowrap" title={applicant.submittedDate}>
+                      {isUnsubmitted ? '—' : applicant.submittedDate.split(' ').slice(0, 3).join(' ')}
                     </td>
 
                     {/* Status Pill (Minimal with dot indicator) */}
                     <td className="py-2.5 px-2.5 text-right rounded-r-2xl whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap ${
-                          item.status === 'VERIFIED'
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : item.status === 'REJECTED'
-                            ? 'bg-rose-50 text-rose-700'
-                            : item.status === 'NO_DOCUMENTS'
-                            ? 'bg-zinc-100 text-zinc-600'
-                            : 'bg-amber-50 text-amber-800'
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                            item.status === 'VERIFIED'
-                              ? 'bg-emerald-500'
-                              : item.status === 'REJECTED'
-                              ? 'bg-rose-500'
-                              : item.status === 'NO_DOCUMENTS'
-                              ? 'bg-zinc-400'
-                              : 'bg-amber-500'
-                          }`}
-                        />
-                        {item.isPackage && item.status === 'REJECTED' && (item.primaryStatus !== 'REJECTED' || item.secondaryStatus !== 'REJECTED')
-                          ? 'Partial Reject'
-                          : displayStatus}
-                      </span>
+                      <VerificationStatusBadge status={applicant.status} />
                     </td>
                   </tr>
+                  {isExpanded && (
+                    <tr>
+                      <td colSpan={4} className="px-2.5 pb-4 pt-2">
+                        <div id={`applicant-documents-${applicant.id}`} aria-label={`Documents for ${item.name}`} className="rounded-2xl bg-zinc-50 p-3 space-y-2">
+                          {isUnsubmitted ? <p className="p-2 text-xs text-zinc-500">No documents submitted yet.</p> : applicant.documents.map(document => (
+                            <VerificationDocumentRow
+                              key={document.id}
+                              document={document}
+                              selected={document.id === selectedVerificationId}
+                              onReview={() => openComparisonModal(document.id)}
+                              onApprove={approveVerification}
+                              onReject={rejectVerification}
+                              onReset={resetVerification}
+                            />
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
@@ -465,7 +476,7 @@ export const VerificationQueue: React.FC = () => {
           <div className="text-xs text-zinc-500 font-medium">
             Showing <span className="font-bold text-zinc-900">{startIndex + 1}</span> to{' '}
             <span className="font-bold text-zinc-900">{endIndex}</span> of{' '}
-            <span className="font-bold text-zinc-900">{totalRecords}</span> records
+            <span className="font-bold text-zinc-900">{totalRecords}</span> applicants
             {totalPages > 1 && (
               <span className="ml-2 text-zinc-400 font-normal">
                 (Page {currentPage} of {totalPages})

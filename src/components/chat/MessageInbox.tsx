@@ -3,10 +3,13 @@ import { MessageSquare, RotateCw } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { messageCountLabel } from '../../data/chatInbox';
 import { UnreadBadge } from './UnreadBadge';
+import { PresenceIndicator } from './PresenceIndicator';
+import { useChatPresence } from '../../hooks/useChatPresence';
 
 export const MessageInbox: React.FC = () => {
-  const { chatInbox, unreadChatCount, chatInboxLoaded, chatInboxError, chatRealtimeStatus, refreshChatInbox, openChatPartner } = useAdmin();
+  const { currentUser, chatInbox, unreadChatCount, chatInboxLoaded, chatInboxError, chatRealtimeStatus, refreshChatInbox, openChatPartner } = useAdmin();
   const [open, setOpen] = useState(false);
+  const presence = useChatPresence(currentUser?.id ?? null, open ? chatInbox.slice(0, 20).map(entry => entry.partner_id) : []);
   const panel = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -48,6 +51,7 @@ export const MessageInbox: React.FC = () => {
                 className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-orange-50 border-b border-zinc-50 ${entry.unread_count > 0 ? 'bg-[#FFF8F4]' : ''}`}>
                 <div className="flex-1 min-w-0"><p className={`text-sm text-zinc-900 truncate ${entry.unread_count > 0 ? 'font-extrabold' : 'font-semibold'}`}>{entry.partner_name}</p>
                   <p className={`mt-1 text-xs truncate ${entry.unread_count > 0 ? 'text-zinc-800 font-semibold' : 'text-zinc-500'}`}>{entry.last_message}</p></div>
+                <PresenceIndicator online={presence(entry.partner_id)} compact />
                 <UnreadBadge count={entry.unread_count} />
               </button>
             ))}

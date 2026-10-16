@@ -2,7 +2,8 @@ import React from 'react';
 import { 
   LayoutDashboard, 
   CheckCircle2, 
-  Users, 
+  Users,
+  ShieldCheck,
   Settings, 
   LogOut,
   PanelLeft,
@@ -10,6 +11,7 @@ import {
   X
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
+import { groupVerificationApplicants } from '../../data/verificationApplicants';
 
 interface SidebarProps {
   isSidebarCollapsed: boolean;
@@ -26,12 +28,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { currentRole, selectedBarangay, activeNav, setActiveNav, verifications, currentUser, logout, unreadChatCount } = useAdmin();
 
-  const pendingCount = verifications.filter(v => v.status === 'PENDING / REVIEW').length;
+  const pendingCount = groupVerificationApplicants(verifications).filter(applicant => applicant.status === 'PENDING / REVIEW').length;
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'verifications', label: 'Verifications', icon: CheckCircle2, badge: pendingCount },
     { id: 'users', label: 'Users', icon: Users, badge: unreadChatCount },
+    { id: 'account-access', label: 'Account Access', icon: ShieldCheck },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
