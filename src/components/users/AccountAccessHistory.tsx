@@ -64,23 +64,23 @@ function accessHistoryExportMarkup(entries: AccessHistoryEntry[], barangay: stri
 export function AccessHistoryTable({ entries }: { entries: AccessHistoryPage['results'] }): React.ReactElement {
   return <div className="px-4 pb-2 pt-6 sm:px-6">
     <h2 className="sr-only">Recent access changes</h2>
-    <div className="overflow-x-auto" role="region" aria-label="Recent access changes">
-      <table className="w-full min-w-[760px] text-left text-xs">
-        <thead>
-          <tr className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400">
-            <th className="pb-3 px-3">Official / Actor</th>
-            <th className="pb-3 px-3">Action</th>
-            <th className="pb-3 px-3">User</th>
-            <th className="pb-3 px-3">Change</th>
-            <th className="pb-3 px-3 text-right">Timestamp</th>
+    <div className="overflow-x-hidden md:overflow-x-auto" role="region" aria-label="Recent access changes">
+      <table className="block w-full text-left text-xs md:table">
+        <thead className="hidden md:table-header-group">
+          <tr className="hidden text-[11px] font-extrabold uppercase tracking-wider text-zinc-400 md:table-row">
+            <th className="px-3 pb-3">Official / Actor</th>
+            <th className="px-3 pb-3">Action</th>
+            <th className="px-3 pb-3">User</th>
+            <th className="px-3 pb-3">Change</th>
+            <th className="px-3 pb-3 text-right">Timestamp</th>
           </tr>
         </thead>
-        <tbody className="font-medium text-zinc-700">
+        <tbody className="block divide-y divide-zinc-100 font-medium text-zinc-700 md:table-row-group">
           {entries.map(entry => {
             const initials = entry.actor_name.split(' ').map(part => part[0]).slice(0, 2).join('').toUpperCase() || 'OF';
             const [from, to] = transitionFor(entry);
-            return <tr key={entry.log_id} className="transition-colors hover:bg-[#F6F5F2]">
-              <td className="rounded-l-2xl px-3 py-4 align-top">
+            return <tr key={entry.log_id} className="grid grid-cols-2 gap-x-4 gap-y-4 p-4 transition-colors hover:bg-[#F6F5F2] md:table-row md:p-0">
+              <td className="col-span-2 block rounded-l-2xl px-0 py-0 align-top md:table-cell md:px-3 md:py-4">
                 <div className="flex items-center gap-2.5">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-[10px] font-black text-white" aria-hidden="true">{initials}</span>
                   <div className="min-w-0">
@@ -89,20 +89,24 @@ export function AccessHistoryTable({ entries }: { entries: AccessHistoryPage['re
                   </div>
                 </div>
               </td>
-              <td className="px-3 py-4 align-top">
+              <td className="block px-0 py-0 align-top md:table-cell md:px-3 md:py-4">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 md:hidden">Action</p>
                 <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tones[entry.action]}`}>{accessActionLabels[entry.action]}</span>
               </td>
-              <td className="px-3 py-4 align-top">
+              <td className="block px-0 py-0 align-top md:table-cell md:px-3 md:py-4">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 md:hidden">User</p>
                 <span className="block font-bold text-zinc-900">{entry.target_name}</span>
                 <span className="mt-1 block text-[11px] text-zinc-500">{entry.target_role} · {historyBarangay(entry.target_barangay)}</span>
               </td>
-              <td className="px-3 py-4 align-top">
+              <td className="col-span-2 block px-0 py-0 align-top md:table-cell md:px-3 md:py-4">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 md:hidden">Change</p>
                 <div className="flex items-center gap-1 text-[11px]">
                   <span className="text-zinc-400">{from}</span><span className="font-bold text-zinc-300">→</span><span className={`font-bold ${entry.action === 'suspend_account' ? 'text-rose-600' : entry.action === 'pause_chat' ? 'text-amber-700' : 'text-emerald-700'}`}>{to}</span>
                 </div>
                 {entry.action === 'pause_chat' && entry.new_state.chat_suspended_until && <p className="mt-1 text-[10px] text-zinc-400">Until {historyDate(entry.new_state.chat_suspended_until)}</p>}
               </td>
-              <td className="rounded-r-2xl px-3 py-4 text-right align-top">
+              <td className="col-span-2 block rounded-r-2xl border-t border-zinc-100 px-0 pt-3 text-left align-top md:table-cell md:border-0 md:px-3 md:py-4 md:text-right">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 md:hidden">Timestamp</p>
                 <time dateTime={entry.created_at} className="block whitespace-nowrap text-[11px] font-semibold text-zinc-600">{historyDate(entry.created_at)}</time>
                 <span className="mt-1 block text-[9px] text-zinc-400">ID #{entry.log_id.slice(-6)}</span>
               </td>
