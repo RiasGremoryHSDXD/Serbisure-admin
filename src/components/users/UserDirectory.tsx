@@ -962,13 +962,19 @@ export const UserDirectory: React.FC = () => {
                       </div>
                     ) : (
                       chatMessages.map((msg, index) => {
-                        const isMe = Boolean(
-                          (messageThreadUserId && msg.receiver_id === messageThreadUserId) ||
+                        const isAdminMessage = (message: ChatMessage) => Boolean(
+                          (messageThreadUserId && message.receiver_id === messageThreadUserId) ||
                           (currentUser?.id && (
-                            (typeof msg.sender_id === 'string' && (msg.sender_id === currentUser.id || msg.sender_id === currentUser.username)) ||
-                            (typeof msg.sender_id === 'object' && ((msg.sender_id as any)?.id === currentUser.id || (msg.sender_id as any)?.username === currentUser.username))
+                            (typeof message.sender_id === 'string' && (message.sender_id === currentUser.id || message.sender_id === currentUser.username)) ||
+                            (typeof message.sender_id === 'object' && ((message.sender_id as any)?.id === currentUser.id || (message.sender_id as any)?.username === currentUser.username))
                           ))
                         );
+                        const isMe = isAdminMessage(msg);
+                        const nextMessage = chatMessages[index + 1];
+                        const nextIsMe = nextMessage ? isAdminMessage(nextMessage) : true;
+                        // Keep the avatar at the bottom of each incoming message group,
+                        // while earlier bubbles reserve the same space for alignment.
+                        const showIncomingAvatar = !isMe && nextIsMe;
 
                         // Facebook Messenger style: show centered timestamp between message clusters (gap >= 15 mins or new day)
                         const prevMsg = chatMessages[index - 1];
@@ -997,85 +1003,98 @@ export const UserDirectory: React.FC = () => {
                             <div
                               className={`group relative flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-2`}
                             >
-                              {/* Bubble Container + Hover Emoji Reaction Bar */}
-                              <div className={`relative flex items-center gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                                {msg.message_type === 'image' ? (
-                                  /* Facebook Messenger style: Standalone borderless image without outer bubble box */
-                                  <div className={`flex flex-col gap-1.5 ${isMe ? 'items-end' : 'items-start'}`}>
-                                    {msg.image_url ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => setLightboxUrl(msg.image_url!)}
-                                        className="group relative block overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer focus:outline-none border border-black/5 bg-transparent p-0 max-w-[260px] sm:max-w-[320px]"
-                                        title="Click to expand image"
-                                      >
-                                        <img
-                                          src={getOptimizedWebpUrl(msg.image_url, { quality: 'auto' })}
-                                          alt="Chat attachment"
-                                          className="w-full h-auto max-h-[320px] rounded-2xl object-cover transition-transform duration-200 group-hover:scale-[1.02] block"
-                                          loading="lazy"
-                                        />
-                                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl text-white">
-                                          <ZoomIn className="w-6 h-6 drop-shadow" />
-                                        </div>
-                                      </button>
-                                    ) : (
-                                      <div className="flex items-center gap-2 p-3 bg-zinc-100 rounded-2xl text-zinc-500 text-xs border border-zinc-200">
-                                        <ImageIcon className="w-5 h-5 text-zinc-400 shrink-0" />
-                                        <span>Image unavailable</span>
-                                      </div>
-                                    )}
-
-                                    {/* Optional caption below image */}
-                                    {msg.message_payload && (
-                                      <div
-                                        className={`max-w-[85%] sm:max-w-[320px] rounded-2xl px-4 py-2 text-xs font-medium break-words shadow-2xs ${
-                                          isMe
-                                            ? 'bg-[#0D0D11] text-white rounded-br-xs'
-                                            : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
-                                        }`}
-                                      >
-                                        {msg.message_payload}
-                                      </div>
-                                    )}
-                                  </div>
+                              <div className={`flex items-end gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                                {!isMe && (showIncomingAvatar ? (
+                                  <UserAvatar
+                                    src={threadPartner?.avatar}
+                                    name={threadPartner?.name || 'User'}
+                                    sizeClass="w-7 h-7 min-w-[28px] min-h-[28px]"
+                                    textClass="font-black text-[10px] text-zinc-600 font-display"
+                                  />
                                 ) : (
-                                  /* Standard text message bubble */
-                                  <div
-                                    title={formatChatDate(msg.createdAt)}
-                                    className={`max-w-[85%] sm:max-w-[460px] rounded-2xl px-4 py-2.5 text-xs font-medium break-words shadow-2xs ${
-                                      isMe
-                                        ? 'bg-[#0D0D11] text-white rounded-br-xs'
-                                        : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
-                                    }`}
-                                  >
-                                    {msg.message_payload}
-                                  </div>
-                                )}
+                                  <span aria-hidden="true" className="w-7 h-7 min-w-[28px] shrink-0" />
+                                ))}
 
-                                {/* Floating Facebook-style Emoji Reaction Bar on Hover */}
-                                <div
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-0.5 bg-white border border-zinc-200 rounded-full px-1.5 py-0.5 shadow-md shrink-0"
-                                >
-                                  {REACTION_OPTIONS.map((emoji) => (
-                                    <button
-                                      key={emoji}
-                                      type="button"
-                                      onClick={() => handleToggleReaction(msg.chat_message_id, emoji)}
-                                      className={`hover:scale-125 transition-transform duration-100 text-sm p-1 rounded-full cursor-pointer leading-none ${
-                                        msg.my_reaction === emoji ? 'bg-blue-50 ring-1 ring-blue-300' : ''
+                                {/* Bubble Container + Hover Emoji Reaction Bar */}
+                                <div className={`relative flex items-center gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                                  {msg.message_type === 'image' ? (
+                                    /* Facebook Messenger style: Standalone borderless image without outer bubble box */
+                                    <div className={`flex flex-col gap-1.5 ${isMe ? 'items-end' : 'items-start'}`}>
+                                      {msg.image_url ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => setLightboxUrl(msg.image_url!)}
+                                          className="group relative block overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer focus:outline-none border border-black/5 bg-transparent p-0 max-w-[260px] sm:max-w-[320px]"
+                                          title="Click to expand image"
+                                        >
+                                          <img
+                                            src={getOptimizedWebpUrl(msg.image_url, { quality: 'auto' })}
+                                            alt="Chat attachment"
+                                            className="w-full h-auto max-h-[320px] rounded-2xl object-cover transition-transform duration-200 group-hover:scale-[1.02] block"
+                                            loading="lazy"
+                                          />
+                                          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl text-white">
+                                            <ZoomIn className="w-6 h-6 drop-shadow" />
+                                          </div>
+                                        </button>
+                                      ) : (
+                                        <div className="flex items-center gap-2 p-3 bg-zinc-100 rounded-2xl text-zinc-500 text-xs border border-zinc-200">
+                                          <ImageIcon className="w-5 h-5 text-zinc-400 shrink-0" />
+                                          <span>Image unavailable</span>
+                                        </div>
+                                      )}
+
+                                      {/* Optional caption below image */}
+                                      {msg.message_payload && (
+                                        <div
+                                          className={`max-w-[85%] sm:max-w-[320px] rounded-2xl px-4 py-2 text-xs font-medium break-words shadow-2xs ${
+                                            isMe
+                                              ? 'bg-[#0D0D11] text-white rounded-br-xs'
+                                              : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
+                                          }`}
+                                        >
+                                          {msg.message_payload}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    /* Standard text message bubble */
+                                    <div
+                                      title={formatChatDate(msg.createdAt)}
+                                      className={`max-w-[85%] sm:max-w-[460px] rounded-2xl px-4 py-2.5 text-xs font-medium break-words shadow-2xs ${
+                                        isMe
+                                          ? 'bg-[#0D0D11] text-white rounded-br-xs'
+                                          : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
                                       }`}
-                                      title={`React ${emoji}`}
                                     >
-                                      {emoji}
-                                    </button>
-                                  ))}
+                                      {msg.message_payload}
+                                    </div>
+                                  )}
+
+                                  {/* Floating Facebook-style Emoji Reaction Bar on Hover */}
+                                  <div
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-0.5 bg-white border border-zinc-200 rounded-full px-1.5 py-0.5 shadow-md shrink-0"
+                                  >
+                                    {REACTION_OPTIONS.map((emoji) => (
+                                      <button
+                                        key={emoji}
+                                        type="button"
+                                        onClick={() => handleToggleReaction(msg.chat_message_id, emoji)}
+                                        className={`hover:scale-125 transition-transform duration-100 text-sm p-1 rounded-full cursor-pointer leading-none ${
+                                          msg.my_reaction === emoji ? 'bg-blue-50 ring-1 ring-blue-300' : ''
+                                        }`}
+                                        title={`React ${emoji}`}
+                                      >
+                                        {emoji}
+                                      </button>
+                                    ))}
+                                  </div>
                                 </div>
                               </div>
 
                               {/* Reaction summary pills */}
                               {msg.reaction_summary && Object.values(msg.reaction_summary).some((c) => c > 0) && (
-                                <div className={`flex flex-wrap gap-1 mt-1 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`flex flex-wrap gap-1 mt-1 px-1 ${isMe ? 'justify-end' : 'justify-start ml-8'}`}>
                                   {Object.entries(msg.reaction_summary).map(([rawEmoji, count]) => {
                                     if (count <= 0) return null;
                                     const cleanEmoji = rawEmoji === '\u2764' || rawEmoji.startsWith('\u2764') ? '❤️' : rawEmoji;
@@ -1105,7 +1124,13 @@ export const UserDirectory: React.FC = () => {
                       })
                     )}
                     {partnerTyping && (
-                      <div role="status" aria-live="polite" aria-label="Typing" className="flex py-1">
+                      <div role="status" aria-live="polite" aria-label="Typing" className="flex items-end gap-1.5 py-1">
+                        <UserAvatar
+                          src={threadPartner?.avatar}
+                          name={threadPartner?.name || 'User'}
+                          sizeClass="w-7 h-7 min-w-[28px] min-h-[28px]"
+                          textClass="font-black text-[10px] text-zinc-600 font-display"
+                        />
                         <span aria-hidden="true" className="inline-flex gap-1 rounded-2xl bg-white px-3 py-2">
                           {[0, 1, 2].map(dot => <span key={dot} className="w-1.5 h-1.5 rounded-full bg-zinc-400 motion-safe:animate-bounce" style={{ animationDelay: `${dot * 150}ms` }} />)}
                         </span>
