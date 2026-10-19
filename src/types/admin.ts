@@ -39,6 +39,12 @@ export interface DashboardMetrics {
 export interface DashboardStatsResponse {
   metrics: DashboardMetrics;
   barangays: BarangayStats[];
+  skills?: SkillsDistribution;
+}
+
+export interface SkillsDistribution {
+  totalWorkers: number;
+  categories: { category: string; count: number; percentage: number }[];
 }
 
 export interface VerificationRequest {
@@ -231,6 +237,15 @@ export interface AuditLogEntry {
   user_agent: string | null;
   metadata?: Record<string, any>;
   created_at: string;
+}
+
+export interface ChatReply {
+  author: string;
+  text: string;
+  imageUri?: string;
+  messageId?: string;
+  /** Local composer hint only. It is intentionally not included in the wire format. */
+  isSelf?: boolean;
 }
 
 export interface ChatMessage {

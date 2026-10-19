@@ -19,8 +19,8 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAdmin } from '../../context/AdminContext';
-import type { AccountRole, AdminRole, UserProfile, ChatMessage, SocialLink } from '../../types/admin';
-import { fetchChatThread, sendChatMessage, sendChatImageMessage, sendChatTyping, toggleChatReaction } from '../../api/adminApi';
+import type { AccountRole, AdminRole, UserProfile, ChatMessage, ChatReply, SocialLink } from '../../types/admin';
+import { fetchChatThread, sendChatMessage, sendChatImageMessage, sendChatTyping, toggleChatReaction, deleteChatMessage } from '../../api/adminApi';
 import { realtime } from '../../realtime';
 import { UnreadBadge } from '../chat/UnreadBadge';
 import { PresenceIndicator } from '../chat/PresenceIndicator';
@@ -29,6 +29,10 @@ import { createChatTyping } from '../../data/chatTyping';
 import { getOptimizedWebpUrl } from '../../utils/imageOptimizer';
 import { useMessagingRestriction } from '../../hooks/useMessagingRestriction';
 import { AccountControls } from './AccountControls';
+import { MessageActions } from '../chat/MessageActions';
+import { QuotedReply } from '../chat/QuotedReply';
+import { RemoveMessageDialog } from '../chat/RemoveMessageDialog';
+import { getReplyRelationship, isOutgoingChatMessage, makeChatReply, parseChatReply, withChatReply } from '../../data/chatReplies';
 
 function inboxRole(accountType: string): AccountRole {
   const value = accountType.toUpperCase();
@@ -123,7 +127,6 @@ const getPlatformMeta = (platformKey: string, platformName?: string) => {
 };
 
 const CHAT_EMOJIS = ['❤️', '👍', '😂', '😢', '😭', '😮', '😱', '😜', '😡'];
-const REACTION_OPTIONS = ['❤️', '👍', '😂', '😮', '😢', '😡'];
 
 function formatChatDate(dateStr?: string): string {
   if (!dateStr) return '';
@@ -211,8 +214,25 @@ export const UserDirectory: React.FC = () => {
   // Chat panel local state
   const [messageThreadUserId, setMessageThreadUserId] = useState<string | null>(null);
   const sendGuard = useRef(false);
-  const sendThread = useRef({ id: messageThreadUserId, generation: 0 });
-  if (sendThread.current.id !== messageThreadUserId) sendThread.current = { id: messageThreadUserId, generation: sendThread.current.generation + 1 };
+  const removedMessages = useRef(new Set<string>());
+  const messageActionsPending = useRef(new Set<string>());
+  const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
+  const [replyingTo, setReplyingTo] = useState<ChatReply | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<ChatMessage | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const sendThread = useRef({ id: messageThreadUserId, account: currentUser?.id, generation: 0 });
+  if (sendThread.current.id !== messageThreadUserId || sendThread.current.account !== currentUser?.id) {
+    sendThread.current = { id: messageThreadUserId, account: currentUser?.id, generation: sendThread.current.generation + 1 };
+    removedMessages.current.clear();
+    messageActionsPending.current.clear();
+  }
+  useEffect(() => {
+    setReplyingTo(null); setActionNotice(null); setPendingActions(new Set());
+    setRemoveTarget(null); setRemoveError(null);
+  }, [messageThreadUserId, currentUser?.id]);
+  useEffect(() => () => { sendThread.current.generation++; }, []);
   const restrictedUntil = useMessagingRestriction();
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -279,7 +299,9 @@ export const UserDirectory: React.FC = () => {
       try {
         const msgs = await fetchChatThread(messageThreadUserId);
         if (!active) return;
-        setChatMessages(prev => JSON.stringify(prev) === JSON.stringify(msgs) ? prev : msgs);
+        const visible = msgs.filter(message => !removedMessages.current.has(message.chat_message_id));
+        setChatMessages(prev => JSON.stringify(prev) === JSON.stringify(visible) ? prev : visible);
+        setReplyingTo(reply => reply?.messageId && !visible.some(message => message.chat_message_id === reply.messageId) ? null : reply);
         setChatError(null);
         loaded = true;
         // Re-read authoritative counts after the successful server read acknowledgement.
@@ -375,16 +397,17 @@ export const UserDirectory: React.FC = () => {
 
   const handleSendImage = async () => {
     if (!messageThreadUserId || !imageFile || isSendingImage || sendGuard.current) return;
+    const captionPayload = withChatReply(chatInput.trim(), replyingTo);
+    if (captionPayload.length > 500) { setChatError('Message is too long. Shorten it and try again.'); return; }
     sendGuard.current = true;
     const generation = sendThread.current.generation;
     composerTyping.current?.stop();
     const fileToSend = imageFile;
-    const captionToSend = chatInput.trim();
 
     setIsSendingImage(true);
     setChatError(null);
     try {
-      const sent = await sendChatImageMessage(messageThreadUserId, fileToSend, captionToSend || undefined);
+      const sent = await sendChatImageMessage(messageThreadUserId, fileToSend, captionPayload || undefined);
       if (generation !== sendThread.current.generation) return;
       setChatMessages((prev) => [...prev, sent]);
       setLanguageNotice(sent.language_warning || null);
@@ -392,6 +415,7 @@ export const UserDirectory: React.FC = () => {
       setImageFile(null);
       setImagePreviewUrl(null);
       setChatInput('');
+      setReplyingTo(null);
     } catch (err: any) {
       if (generation !== sendThread.current.generation) return;
       setChatError(err?.message || 'Failed to send image. Please retry.');
@@ -403,6 +427,8 @@ export const UserDirectory: React.FC = () => {
 
   const handleSend = async () => {
     if (!messageThreadUserId || !chatInput.trim() || isSending || sendGuard.current) return;
+    const messagePayload = withChatReply(chatInput.trim(), replyingTo);
+    if (messagePayload.length > 500) { setChatError('Message is too long. Shorten it and try again.'); return; }
     sendGuard.current = true;
     const generation = sendThread.current.generation;
     const payload = chatInput.trim();
@@ -411,10 +437,11 @@ export const UserDirectory: React.FC = () => {
     setIsSending(true);
     setChatError(null);
     try {
-      const sent = await sendChatMessage(messageThreadUserId, payload);
+      const sent = await sendChatMessage(messageThreadUserId, messagePayload);
       if (generation !== sendThread.current.generation) return;
       setChatMessages((prev) => [...prev, sent]);
       setLanguageNotice(sent.language_warning || null);
+      setReplyingTo(null);
       void refreshChatInbox(); // Re-sort the list after a new message is sent
     } catch (err: any) {
       if (generation !== sendThread.current.generation) return;
@@ -427,34 +454,13 @@ export const UserDirectory: React.FC = () => {
   };
 
   const handleToggleReaction = async (messageId: string, emoji: string) => {
-    // Optimistic local state update
-    setChatMessages((prev) =>
-      prev.map((m) => {
-        if (m.chat_message_id !== messageId) return m;
-        const currentSummary = { ...(m.reaction_summary || {}) };
-        const currentMy = m.my_reaction;
-        let newMy: string | null = emoji;
-
-        if (currentMy === emoji) {
-          newMy = null;
-          currentSummary[emoji] = Math.max(0, (currentSummary[emoji] || 1) - 1);
-        } else {
-          if (currentMy && currentSummary[currentMy]) {
-            currentSummary[currentMy] = Math.max(0, currentSummary[currentMy] - 1);
-          }
-          currentSummary[emoji] = (currentSummary[emoji] || 0) + 1;
-        }
-
-        return {
-          ...m,
-          my_reaction: newMy,
-          reaction_summary: currentSummary,
-        };
-      })
-    );
-
+    if (messageActionsPending.current.has(messageId)) return;
+    messageActionsPending.current.add(messageId);
+    setPendingActions(new Set(messageActionsPending.current));
+    const generation = sendThread.current.generation;
     try {
       const res = await toggleChatReaction(messageId, emoji);
+      if (generation !== sendThread.current.generation) return;
       if (res?.data) {
         setChatMessages((prev) =>
           prev.map((m) =>
@@ -468,11 +474,49 @@ export const UserDirectory: React.FC = () => {
           )
         );
       }
-    } catch (err: any) {
-      console.error('Failed to toggle reaction:', err);
-      if (messageThreadUserId) {
-        fetchChatThread(messageThreadUserId).then(setChatMessages).catch(() => {});
+    } catch {
+      if (generation === sendThread.current.generation) setActionNotice('Could not update the reaction. Try again.');
+    } finally {
+      if (generation === sendThread.current.generation) {
+        messageActionsPending.current.delete(messageId);
+        setPendingActions(new Set(messageActionsPending.current));
       }
+    }
+  };
+
+  const handleRemoveMessage = async (message: ChatMessage) => {
+    const id = message.chat_message_id;
+    if (messageActionsPending.current.has(id)) return;
+    setRemoveError(null);
+    messageActionsPending.current.add(id);
+    setPendingActions(new Set(messageActionsPending.current));
+    const generation = sendThread.current.generation;
+    try {
+      await deleteChatMessage(id);
+      if (generation !== sendThread.current.generation) return;
+      removedMessages.current.add(id);
+      setChatMessages(messages => messages.filter(item => item.chat_message_id !== id));
+      setReplyingTo(reply => reply?.messageId === id ? null : reply);
+      setRemoveTarget(null);
+      setActionNotice('Message removed for you.');
+      void refreshChatInbox();
+    } catch {
+      if (generation === sendThread.current.generation) setRemoveError('Could not remove the message. Try again.');
+    } finally {
+      if (generation === sendThread.current.generation) {
+        messageActionsPending.current.delete(id);
+        setPendingActions(new Set(messageActionsPending.current));
+      }
+    }
+  };
+
+  const handleCopyMessage = async (text: string) => {
+    const generation = sendThread.current.generation;
+    try {
+      await navigator.clipboard.writeText(text);
+      if (generation === sendThread.current.generation) setActionNotice('Text copied.');
+    } catch {
+      if (generation === sendThread.current.generation) setActionNotice('Could not copy the text. Try again.');
     }
   };
 
@@ -962,13 +1006,23 @@ export const UserDirectory: React.FC = () => {
                       </div>
                     ) : (
                       chatMessages.map((msg, index) => {
-                        const isMe = Boolean(
-                          (messageThreadUserId && msg.receiver_id === messageThreadUserId) ||
-                          (currentUser?.id && (
-                            (typeof msg.sender_id === 'string' && (msg.sender_id === currentUser.id || msg.sender_id === currentUser.username)) ||
-                            (typeof msg.sender_id === 'object' && ((msg.sender_id as any)?.id === currentUser.id || (msg.sender_id as any)?.username === currentUser.username))
-                          ))
-                        );
+                        const isAdminMessage = (message: ChatMessage) => isOutgoingChatMessage(message, messageThreadUserId, currentUser);
+                        const isMe = isAdminMessage(msg);
+                        const { text: messageText, reply } = parseChatReply(msg.message_payload);
+                        const quotedMessage = reply?.messageId ? chatMessages.find(message => message.chat_message_id === reply.messageId) : undefined;
+                        const normalizedReplyAuthor = reply?.author.trim().toLocaleLowerCase();
+                        const adminNames = [currentUser?.name, currentUser?.username].filter(Boolean).map(value => value!.trim().toLocaleLowerCase());
+                        const quotedIsMe = quotedMessage ? isAdminMessage(quotedMessage)
+                          : normalizedReplyAuthor === 'you' ? isMe
+                            : normalizedReplyAuthor && adminNames.includes(normalizedReplyAuthor) ? true
+                              : normalizedReplyAuthor === threadPartner?.name.trim().toLocaleLowerCase() ? false
+                                : !isMe;
+                        const replyRelationship = reply ? getReplyRelationship(isMe, quotedIsMe, threadPartner?.name || 'User') : '';
+                        const nextMessage = chatMessages[index + 1];
+                        const nextIsMe = nextMessage ? isAdminMessage(nextMessage) : true;
+                        // Keep the avatar at the bottom of each incoming message group,
+                        // while earlier bubbles reserve the same space for alignment.
+                        const showIncomingAvatar = !isMe && nextIsMe;
 
                         // Facebook Messenger style: show centered timestamp between message clusters (gap >= 15 mins or new day)
                         const prevMsg = chatMessages[index - 1];
@@ -994,94 +1048,101 @@ export const UserDirectory: React.FC = () => {
                               </div>
                             )}
 
-                            <div
+                            <div id={`chat-message-${msg.chat_message_id}`}
                               className={`group relative flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-2`}
                             >
-                              {/* Bubble Container + Hover Emoji Reaction Bar */}
-                              <div className={`relative flex items-center gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                                {msg.message_type === 'image' ? (
-                                  /* Facebook Messenger style: Standalone borderless image without outer bubble box */
-                                  <div className={`flex flex-col gap-1.5 ${isMe ? 'items-end' : 'items-start'}`}>
-                                    {msg.image_url ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => setLightboxUrl(msg.image_url!)}
-                                        className="group relative block overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer focus:outline-none border border-black/5 bg-transparent p-0 max-w-[260px] sm:max-w-[320px]"
-                                        title="Click to expand image"
-                                      >
-                                        <img
-                                          src={getOptimizedWebpUrl(msg.image_url, { quality: 'auto' })}
-                                          alt="Chat attachment"
-                                          className="w-full h-auto max-h-[320px] rounded-2xl object-cover transition-transform duration-200 group-hover:scale-[1.02] block"
-                                          loading="lazy"
-                                        />
-                                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl text-white">
-                                          <ZoomIn className="w-6 h-6 drop-shadow" />
-                                        </div>
-                                      </button>
-                                    ) : (
-                                      <div className="flex items-center gap-2 p-3 bg-zinc-100 rounded-2xl text-zinc-500 text-xs border border-zinc-200">
-                                        <ImageIcon className="w-5 h-5 text-zinc-400 shrink-0" />
-                                        <span>Image unavailable</span>
-                                      </div>
-                                    )}
-
-                                    {/* Optional caption below image */}
-                                    {msg.message_payload && (
-                                      <div
-                                        className={`max-w-[85%] sm:max-w-[320px] rounded-2xl px-4 py-2 text-xs font-medium break-words shadow-2xs ${
-                                          isMe
-                                            ? 'bg-[#0D0D11] text-white rounded-br-xs'
-                                            : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
-                                        }`}
-                                      >
-                                        {msg.message_payload}
-                                      </div>
-                                    )}
-                                  </div>
+                              <div className={`flex items-end gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                                {!isMe && (showIncomingAvatar ? (
+                                  <UserAvatar
+                                    src={threadPartner?.avatar}
+                                    name={threadPartner?.name || 'User'}
+                                    sizeClass="w-7 h-7 min-w-[28px] min-h-[28px]"
+                                    textClass="font-black text-[10px] text-zinc-600 font-display"
+                                  />
                                 ) : (
-                                  /* Standard text message bubble */
-                                  <div
-                                    title={formatChatDate(msg.createdAt)}
-                                    className={`max-w-[85%] sm:max-w-[460px] rounded-2xl px-4 py-2.5 text-xs font-medium break-words shadow-2xs ${
-                                      isMe
-                                        ? 'bg-[#0D0D11] text-white rounded-br-xs'
-                                        : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
-                                    }`}
-                                  >
-                                    {msg.message_payload}
-                                  </div>
-                                )}
+                                  <span aria-hidden="true" className="w-7 h-7 min-w-[28px] shrink-0" />
+                                ))}
 
-                                {/* Floating Facebook-style Emoji Reaction Bar on Hover */}
-                                <div
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-0.5 bg-white border border-zinc-200 rounded-full px-1.5 py-0.5 shadow-md shrink-0"
-                                >
-                                  {REACTION_OPTIONS.map((emoji) => (
-                                    <button
-                                      key={emoji}
-                                      type="button"
-                                      onClick={() => handleToggleReaction(msg.chat_message_id, emoji)}
-                                      className={`hover:scale-125 transition-transform duration-100 text-sm p-1 rounded-full cursor-pointer leading-none ${
-                                        msg.my_reaction === emoji ? 'bg-blue-50 ring-1 ring-blue-300' : ''
+                                {/* Bubble Container + Hover Emoji Reaction Bar */}
+                                <div className={clsx('relative flex min-w-0 max-w-full items-center gap-1.5', isMe ? 'flex-row-reverse' : 'flex-row')}>
+                                  <div className={clsx('flex min-w-0 max-w-full flex-col', isMe ? 'items-end' : 'items-start')}>
+                                  {reply && <QuotedReply key={`${msg.chat_message_id}-${reply.messageId}`} reply={reply} relationship={replyRelationship} mine={isMe} />}
+                                  {msg.message_type === 'image' ? (
+                                    /* Facebook Messenger style: Standalone borderless image without outer bubble box */
+                                    <div className={`flex flex-col gap-1.5 ${isMe ? 'items-end' : 'items-start'}`}>
+                                      {msg.image_url ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => setLightboxUrl(msg.image_url!)}
+                                          className="group relative block overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer focus:outline-none border border-black/5 bg-transparent p-0 max-w-[260px] sm:max-w-[320px]"
+                                          title="Click to expand image"
+                                        >
+                                          <img
+                                            src={getOptimizedWebpUrl(msg.image_url, { quality: 'auto' })}
+                                            alt="Chat attachment"
+                                            className="w-full h-auto max-h-[320px] rounded-2xl object-cover transition-transform duration-200 group-hover:scale-[1.02] block"
+                                            loading="lazy"
+                                          />
+                                          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl text-white">
+                                            <ZoomIn className="w-6 h-6 drop-shadow" />
+                                          </div>
+                                        </button>
+                                      ) : (
+                                        <div className="flex items-center gap-2 p-3 bg-zinc-100 rounded-2xl text-zinc-500 text-xs border border-zinc-200">
+                                          <ImageIcon className="w-5 h-5 text-zinc-400 shrink-0" />
+                                          <span>Image unavailable</span>
+                                        </div>
+                                      )}
+
+                                      {/* Optional caption below image */}
+                                      {messageText && (
+                                        <div
+                                          className={`max-w-full sm:max-w-[320px] rounded-2xl px-4 py-2 text-xs font-medium [overflow-wrap:anywhere] shadow-2xs ${
+                                            isMe
+                                              ? 'bg-[#0D0D11] text-white rounded-br-xs'
+                                              : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
+                                          }`}
+                                        >
+                                          {messageText}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    /* Standard text message bubble */
+                                    <div
+                                      title={formatChatDate(msg.createdAt)}
+                                      className={`w-fit max-w-full sm:max-w-[460px] rounded-2xl px-4 py-2.5 text-xs font-medium [overflow-wrap:anywhere] shadow-2xs ${
+                                        isMe
+                                          ? 'bg-[#0D0D11] text-white rounded-br-xs'
+                                          : 'bg-[#F0F0EC] text-zinc-900 rounded-bl-xs'
                                       }`}
-                                      title={`React ${emoji}`}
                                     >
-                                      {emoji}
-                                    </button>
-                                  ))}
+                                      {messageText}
+                                    </div>
+                                  )}
+                                  </div>
+
+                                  <MessageActions mine={isMe} reaction={msg.my_reaction} hasText={!!messageText.trim()} busy={pendingActions.has(msg.chat_message_id)}
+                                    disabled={pendingActions.has(msg.chat_message_id) || isSending || isSendingImage}
+                                    onReact={emoji => void handleToggleReaction(msg.chat_message_id, emoji)}
+                                    onReply={() => {
+                                      setReplyingTo(makeChatReply(msg, isMe ? currentUser?.name || 'Admin' : threadPartner?.name || 'User', isMe));
+                                      composerRef.current?.focus();
+                                    }}
+                                    onRemove={() => { setRemoveError(null); setRemoveTarget(msg); }}
+                                    onCopy={() => void handleCopyMessage(messageText)} />
                                 </div>
                               </div>
 
                               {/* Reaction summary pills */}
                               {msg.reaction_summary && Object.values(msg.reaction_summary).some((c) => c > 0) && (
-                                <div className={`flex flex-wrap gap-1 mt-1 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`flex flex-wrap gap-1 mt-1 px-1 ${isMe ? 'justify-end' : 'justify-start ml-8'}`}>
                                   {Object.entries(msg.reaction_summary).map(([rawEmoji, count]) => {
                                     if (count <= 0) return null;
                                     const cleanEmoji = rawEmoji === '\u2764' || rawEmoji.startsWith('\u2764') ? '❤️' : rawEmoji;
                                     const isMyReaction = msg.my_reaction === cleanEmoji;
                                     return (
-                                      <button
+                                      <button disabled={pendingActions.has(msg.chat_message_id)}
                                         key={rawEmoji}
                                         type="button"
                                         onClick={() => handleToggleReaction(msg.chat_message_id, cleanEmoji)}
@@ -1105,7 +1166,13 @@ export const UserDirectory: React.FC = () => {
                       })
                     )}
                     {partnerTyping && (
-                      <div role="status" aria-live="polite" aria-label="Typing" className="flex py-1">
+                      <div role="status" aria-live="polite" aria-label="Typing" className="flex items-end gap-1.5 py-1">
+                        <UserAvatar
+                          src={threadPartner?.avatar}
+                          name={threadPartner?.name || 'User'}
+                          sizeClass="w-7 h-7 min-w-[28px] min-h-[28px]"
+                          textClass="font-black text-[10px] text-zinc-600 font-display"
+                        />
                         <span aria-hidden="true" className="inline-flex gap-1 rounded-2xl bg-white px-3 py-2">
                           {[0, 1, 2].map(dot => <span key={dot} className="w-1.5 h-1.5 rounded-full bg-zinc-400 motion-safe:animate-bounce" style={{ animationDelay: `${dot * 150}ms` }} />)}
                         </span>
@@ -1126,6 +1193,13 @@ export const UserDirectory: React.FC = () => {
                     </div>
                   ) : (
                     <>
+                      {actionNotice && <div role="status" className="mb-2 flex items-center justify-between gap-2 text-xs text-zinc-600">
+                        <span>{actionNotice}</span><button type="button" aria-label="Dismiss message notice" onClick={() => setActionNotice(null)} className="rounded-full p-1"><X size={14} /></button>
+                      </div>}
+                      {replyingTo && <div className="mb-3 flex min-w-0 items-center gap-3 px-1 pb-1" aria-label="Reply preview">
+                        <div className="min-w-0 flex-1"><QuotedReply key={replyingTo.messageId} reply={replyingTo} variant="composer" author={replyingTo.isSelf ? 'Replying to yourself' : `Replying to ${replyingTo.author}`} /></div>
+                        <button type="button" aria-label="Cancel reply" disabled={isSending || isSendingImage} onClick={() => setReplyingTo(null)} className="shrink-0 rounded-full p-2 text-zinc-700 transition-colors hover:bg-zinc-50 hover:text-zinc-950 disabled:opacity-40"><X size={17} /></button>
+                      </div>}
                       {/* Selected image preview */}
                       {imagePreviewUrl && (
                         <div className="flex items-center gap-2 px-3 py-2 bg-zinc-50 rounded-xl border border-zinc-200 mb-2">
@@ -1212,6 +1286,7 @@ export const UserDirectory: React.FC = () => {
 
                         {/* Textarea */}
                         <textarea
+                          ref={composerRef}
                           rows={1}
                           value={chatInput}
                           onChange={e => {
@@ -1220,6 +1295,7 @@ export const UserDirectory: React.FC = () => {
                           }}
                           onBlur={() => composerTyping.current?.stop()}
                           onKeyDown={(e) => {
+                            if (e.key === 'Escape') setReplyingTo(null);
                             if (e.key === 'Enter' && !e.shiftKey) {
                               e.preventDefault();
                               if (!isSending && !isSendingImage) {
@@ -1454,6 +1530,10 @@ export const UserDirectory: React.FC = () => {
           )}
         </div>
       </div>
+
+      {removeTarget && <RemoveMessageDialog busy={pendingActions.has(removeTarget.chat_message_id)} error={removeError}
+        onCancel={() => { setRemoveTarget(null); setRemoveError(null); }}
+        onRemove={() => void handleRemoveMessage(removeTarget)} />}
 
       {/* Lightbox for full size image preview */}
       {lightboxUrl && (

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { AdminRole, BarangayStats, VerificationRequest, UserProfile, BookingCompliance, DashboardMetrics, AuditLogEntry } from '../types/admin';
+import { AdminRole, BarangayStats, VerificationRequest, UserProfile, BookingCompliance, DashboardMetrics, AuditLogEntry, SkillsDistribution } from '../types/admin';
 import { DashboardRequestGate, validateDashboardSnapshot } from '../data/adminDashboard';
 import type { RealtimeStatus } from '../realtime/RealtimeClient';
 import { useChatInbox } from '../hooks/useChatInbox';
@@ -62,6 +62,7 @@ interface AdminContextType {
   refreshDashboardStats: () => Promise<void>;
   refreshDashboardActivity: () => Promise<void>;
   dashboardMetrics: DashboardMetrics | null;
+  dashboardSkills: SkillsDistribution | null;
   monthlyTrend: MonthlyTrendPoint[];
   isLoadingMonthlyTrend: boolean;
   refreshMonthlyTrend: () => Promise<void>;
@@ -319,6 +320,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const dashboardFlight = useRef<{ scope: string; id: number } | null>(null);
   const source = dashboardSource?.scope === dashboardScope ? dashboardSource.data : null;
   const dashboardMetrics = source?.metrics || null;
+  const dashboardSkills = source?.skills || null;
   const directoryBarangays = source?.barangays || [];
   const barangays = directoryBarangays.filter(row => row.status === 'ACTIVE');
   const userBarangays = directoryBarangays.map(row => row.name);
@@ -524,6 +526,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         refreshDashboardStats,
         refreshDashboardActivity,
         dashboardMetrics,
+        dashboardSkills,
         monthlyTrend,
         isLoadingMonthlyTrend,
         refreshMonthlyTrend,

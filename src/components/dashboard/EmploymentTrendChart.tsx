@@ -6,7 +6,10 @@ import { fetchMonthlyTrend, MonthlyTrendPoint } from '../../api/adminApi';
 export const EmploymentTrendChart: React.FC = () => {
   const { 
     isLoadingMonthlyTrend, 
-    selectedBarangay, 
+    selectedBarangay,
+    setSelectedBarangay,
+    currentUser,
+    dashboardMetrics,
     barangays,
     userBarangays,
   } = useAdmin();
@@ -22,7 +25,10 @@ export const EmploymentTrendChart: React.FC = () => {
   const [chartData, setChartData] = useState<MonthlyTrendPoint[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const phNow = new Date(Date.now() + 8 * 3600000);
+  const currentMonth = phNow.getUTCFullYear() * 12 + phNow.getUTCMonth();
 
   // Synchronize when parent selectedBarangay changes (e.g. from navbar selector)
   useEffect(() => {
@@ -53,9 +59,12 @@ export const EmploymentTrendChart: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [activeBarangay]);
+  }, [activeBarangay, attempt, currentMonth]);
 
-  const DISPLAY_DATA = chartData;
+  // The existing dashboard refresh also keeps this month's bars in sync with the cards.
+  const DISPLAY_DATA = chartData.map((point, index) => dashboardMetrics && activeBarangay === selectedBarangay && index === chartData.length - 1
+    ? { ...point, employed: dashboardMetrics.totalEmployed, available: dashboardMetrics.totalAvailable, total: dashboardMetrics.totalWorkers }
+    : point);
 
   // Chart dimensions
   const width = 560;
@@ -71,8 +80,8 @@ export const EmploymentTrendChart: React.FC = () => {
   // Dynamic maximum calculation
   const rawMax = Math.max(
     1,
-    ...DISPLAY_DATA.map((d) => d.employed || 0),
-    ...DISPLAY_DATA.map((d) => d.available || 0)
+    ...DISPLAY_DATA.map((d) => (d.employed ?? 0) || 0),
+    ...DISPLAY_DATA.map((d) => (d.available ?? 0) || 0)
   );
 
   // Clean discrete integer grid scaling for realistic workforce numbers
@@ -128,8 +137,9 @@ export const EmploymentTrendChart: React.FC = () => {
   }, [barangays, userBarangays]);
 
   return (
-    <div className="bg-white rounded-3xl p-5 sm:p-7 min-w-0 flex flex-col justify-between h-full relative shadow-sm border border-zinc-100">
-      {error && <p role="alert" className="mb-3 text-xs text-amber-800">{error}</p>}
+    <div className="bg-white rounded-3xl p-5 sm:p-7 min-w-0 flex flex-col justify-start h-full relative shadow-sm border border-zinc-100">
+      {error && <p role="alert" className="mb-3 text-xs text-amber-800">{error} <button className="underline" onClick={() => setAttempt(value => value + 1)}>Retry</button></p>}
+      {chartData.some(point => point.has_history === false) && <p className="mb-2 text-xs text-zinc-500">Earlier months have no recorded status history. Current month uses live verified-worker counts.</p>}
       {!isLoading && !error && chartData.length === 0 && <p className="mb-3 text-xs text-zinc-500">No employment trend data yet.</p>}
       {/* Minimal Header & Controls */}
       <div className="flex flex-col gap-3 mb-4 min-w-0">
@@ -151,7 +161,8 @@ export const EmploymentTrendChart: React.FC = () => {
           <div className="relative min-w-0 max-w-full">
             <select
               value={activeBarangay}
-              onChange={(e) => setActiveBarangay(e.target.value)}
+              onChange={(e) => { setActiveBarangay(e.target.value); setSelectedBarangay(e.target.value); }}
+              disabled={currentUser?.role === 'ADMIN'}
               aria-label="Filter employment trends by barangay"
               title={activeBarangay === 'All Barangays' ? 'All CDO Barangays' : `Brgy. ${activeBarangay}`}
               className="appearance-none max-w-full truncate bg-[#F4F4F0] hover:bg-[#EAEAE5] text-zinc-800 text-xs font-bold font-display py-1.5 pl-3 pr-7 rounded-full border border-zinc-200/60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-colors"
@@ -168,7 +179,7 @@ export const EmploymentTrendChart: React.FC = () => {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-medium text-zinc-600">
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-[#F97316]" />
-              <span className="whitespace-nowrap">On the Job</span>
+              <span className="whitespace-nowrap">Occupied</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-[#0D0D11]" />
@@ -188,8 +199,8 @@ export const EmploymentTrendChart: React.FC = () => {
           onMouseLeave={() => setHoveredIdx(null)}
         >
           <defs>
-            {/* Orange Gradient for On the Job bars */}
-            <linearGradient id="onJobBarGradient" x1="0" y1="0" x2="0" y2="1">
+            {/* Orange Gradient for Occupied bars */}
+            <linearGradient id="occupiedBarGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#FB923C" />
               <stop offset="100%" stopColor="#EA580C" />
             </linearGradient>
@@ -248,9 +259,14 @@ export const EmploymentTrendChart: React.FC = () => {
             const isHovered = idx === activeHoverIdx;
             const isCurrentMonth = idx === DISPLAY_DATA.length - 1;
 
+            if (d.has_history === false) return <g key={`${d.month}-${d.year}`}>
+              <text x={xCenter} y={height / 2} textAnchor="middle" className="text-[9px] fill-zinc-400">No history</text>
+              <text x={xCenter} y={height - 10} textAnchor="middle" className="text-[10px] fill-zinc-400">{d.month}</text>
+            </g>;
+
             // Bar heights
-            const onJobHeight = Math.max(0, (d.employed / maxVal) * chartAreaHeight);
-            const availableHeight = Math.max(0, (d.available / maxVal) * chartAreaHeight);
+            const onJobHeight = Math.max(0, ((d.employed ?? 0) / maxVal) * chartAreaHeight);
+            const availableHeight = Math.max(0, ((d.available ?? 0) / maxVal) * chartAreaHeight);
 
             const onJobY = paddingTop + chartAreaHeight - onJobHeight;
             const availableY = paddingTop + chartAreaHeight - availableHeight;
@@ -275,13 +291,13 @@ export const EmploymentTrendChart: React.FC = () => {
                   className="transition-colors duration-150"
                 />
 
-                {/* On the Job Bar (Orange) */}
+                {/* Occupied Bar (Orange) */}
                 <rect
                   x={onJobX}
                   y={onJobHeight > 0 ? onJobY : paddingTop + chartAreaHeight - 2}
                   width={barWidth}
-                  height={Math.max(3, onJobHeight)}
-                  fill="url(#onJobBarGradient)"
+                  height={onJobHeight}
+                  fill="url(#occupiedBarGradient)"
                   rx="3"
                   className={`transition-all duration-300 ${isHovered ? 'filter drop-shadow(0 2px 4px rgba(249,115,22,0.35))' : ''}`}
                 />
@@ -291,7 +307,7 @@ export const EmploymentTrendChart: React.FC = () => {
                   x={availableX}
                   y={availableHeight > 0 ? availableY : paddingTop + chartAreaHeight - 2}
                   width={barWidth}
-                  height={Math.max(3, availableHeight)}
+                  height={availableHeight}
                   fill="url(#availableBarGradient)"
                   rx="3"
                   className={`transition-all duration-300 ${isHovered ? 'filter drop-shadow(0 2px 4px rgba(0,0,0,0.25))' : ''}`}
@@ -300,24 +316,24 @@ export const EmploymentTrendChart: React.FC = () => {
                 {/* Numeric label above bars when hovered or active */}
                 {isHovered && (
                   <>
-                    {d.employed > 0 && (
+                    {(d.employed ?? 0) > 0 && (
                       <text
                         x={onJobX + barWidth / 2}
                         y={Math.max(paddingTop + 8, onJobY - 4)}
                         textAnchor="middle"
                         className="text-[9px] fill-orange-600 font-black"
                       >
-                        {d.employed}
+                        {(d.employed ?? 0)}
                       </text>
                     )}
-                    {d.available > 0 && (
+                    {(d.available ?? 0) > 0 && (
                       <text
                         x={availableX + barWidth / 2}
                         y={Math.max(paddingTop + 8, availableY - 4)}
                         textAnchor="middle"
                         className="text-[9px] fill-zinc-800 font-black"
                       >
-                        {d.available}
+                        {(d.available ?? 0)}
                       </text>
                     )}
                   </>
@@ -375,7 +391,7 @@ export const EmploymentTrendChart: React.FC = () => {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-zinc-400 text-[11px] flex items-center gap-1.5 font-medium">
-                  <span className="w-2 h-2 rounded-sm bg-[#F97316]" /> On the Job
+                  <span className="w-2 h-2 rounded-sm bg-[#F97316]" /> Occupied
                 </span>
                 <span className="font-black text-orange-400">{activeHoverPoint.employed}</span>
               </div>
@@ -388,7 +404,7 @@ export const EmploymentTrendChart: React.FC = () => {
               <div className="flex items-center justify-between pt-1 border-t border-zinc-800/80 text-[10px] text-zinc-400">
                 <span>Total Workforce</span>
                 <span className="font-bold text-zinc-200">
-                  {activeHoverPoint.total || activeHoverPoint.employed + activeHoverPoint.available}
+                  {activeHoverPoint.total ?? ((activeHoverPoint.employed ?? 0) + (activeHoverPoint.available ?? 0))}
                 </span>
               </div>
             </div>

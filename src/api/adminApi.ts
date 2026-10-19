@@ -81,10 +81,11 @@ export async function fetchDashboardActivity(barangay?: string): Promise<{ booki
 export interface MonthlyTrendPoint {
   month: string;
   year: number;
-  employed: number;
+  employed: number | null;
   on_the_job?: number;
-  available: number;
-  total: number;
+  available: number | null;
+  total: number | null;
+  has_history?: boolean;
 }
 
 export interface MonthlyTrendResponse {
@@ -93,6 +94,7 @@ export interface MonthlyTrendResponse {
   total_workers?: number;
   current_on_the_job?: number;
   current_available?: number;
+  history_since?: string | null;
 }
 
 export async function fetchMonthlyTrend(barangay?: string): Promise<MonthlyTrendResponse> {
@@ -189,10 +191,12 @@ export interface VerificationStatusStatsResponse {
 }
 
 export async function fetchVerificationStatusStats(
-  barangay?: string
+  barangay?: string,
+  role: 'All Roles' | 'Kasambahay' | 'Homeowner' = 'All Roles',
 ): Promise<VerificationStatusStatsResponse> {
   const params = new URLSearchParams();
   if (barangay && barangay !== 'All Barangays') params.append('barangay', barangay);
+  if (role !== 'All Roles') params.append('role', role);
   const query = params.toString() ? `?${params.toString()}` : '';
   return fetchApi<VerificationStatusStatsResponse>(
     `/api/v1/accounts/admin/verification-status-stats/${query}`
@@ -268,6 +272,12 @@ export async function sendChatImageMessage(
  */
 export async function markMessageRead(messageId: string): Promise<void> {
   await fetchApi<unknown>(`/api/v1/chat/read/${messageId}/`, { method: 'PATCH' });
+}
+
+export async function deleteChatMessage(messageId: string): Promise<void> {
+  await fetchApi(`/api/v1/chat/message/${encodeURIComponent(messageId.trim())}/`, {
+    method: 'DELETE', maxRetries: 0,
+  });
 }
 
 export interface ToggleReactionResponse {
