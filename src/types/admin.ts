@@ -233,6 +233,15 @@ export interface AuditLogEntry {
   created_at: string;
 }
 
+export interface ChatReply {
+  author: string;
+  text: string;
+  imageUri?: string;
+  messageId?: string;
+  /** Local composer hint only. It is intentionally not included in the wire format. */
+  isSelf?: boolean;
+}
+
 export interface ChatMessage {
   language_warning?: string | null;
   chat_message_id: string;

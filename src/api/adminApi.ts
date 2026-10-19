@@ -270,6 +270,12 @@ export async function markMessageRead(messageId: string): Promise<void> {
   await fetchApi<unknown>(`/api/v1/chat/read/${messageId}/`, { method: 'PATCH' });
 }
 
+export async function deleteChatMessage(messageId: string): Promise<void> {
+  await fetchApi(`/api/v1/chat/message/${encodeURIComponent(messageId.trim())}/`, {
+    method: 'DELETE', maxRetries: 0,
+  });
+}
+
 export interface ToggleReactionResponse {
   message: string;
   data: {
