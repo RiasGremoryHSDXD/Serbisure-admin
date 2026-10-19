@@ -19,6 +19,15 @@ export function validateDashboardSnapshot(value: DashboardStatsResponse): Dashbo
       throw new Error('The barangay directory returned inconsistent data. Please retry.');
     }
   }
+  if (value.skills) {
+    if (value.skills.totalWorkers !== metrics.totalWorkers || !Array.isArray(value.skills.categories) ||
+        value.skills.categories.length !== 6 || new Set(value.skills.categories.map(item => item.category)).size !== 6 ||
+        value.skills.categories.some(item => !['Cleaning', 'Cooking', 'Child_care', 'Caregiver', 'Laundry', 'All-around'].includes(item.category) ||
+          !count(item.count) || item.count > metrics.totalWorkers || !Number.isFinite(item.percentage) || item.percentage < 0 || item.percentage > 100 ||
+          Math.abs(item.percentage - (metrics.totalWorkers ? Math.round(item.count / metrics.totalWorkers * 1000) / 10 : 0)) > 0.01)) {
+      throw new Error('The skills panel returned inconsistent data. Please retry.');
+    }
+  }
   return value;
 }
 

@@ -62,7 +62,9 @@ const STATUS_CONFIG: StatusItemConfig[] = [
 ];
 
 export const VerificationStatusChart: React.FC = () => {
-  const { selectedBarangay, barangays, userBarangays } = useAdmin();
+  const { selectedBarangay, setSelectedBarangay, barangays, userBarangays, currentUser } = useAdmin();
+  const [role, setRole] = useState<'All Roles' | 'Kasambahay' | 'Homeowner'>('All Roles');
+  const [attempt, setAttempt] = useState(0);
 
   // Idiot-proof default: Default to 'All Barangays' for superadmin context or fallback
   const [activeBarangay, setActiveBarangay] = useState<string>(() => {
@@ -78,7 +80,6 @@ export const VerificationStatusChart: React.FC = () => {
   });
   const [total, setTotal] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [hasInitialLoaded, setHasInitialLoaded] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
@@ -90,14 +91,17 @@ export const VerificationStatusChart: React.FC = () => {
   }, [selectedBarangay]);
 
   // Robust data loader with retry capability
-  const loadStats = useCallback((bgy: string) => {
+  const loadStats = useCallback(() => setAttempt(value => value + 1), []);
+  useEffect(() => {
+    const bgy = activeBarangay;
     let isMounted = true;
     setIsLoading(true);
     setError(null);
+    setStats({ verified: 0, pending: 0, unverified: 0, rejected: 0 }); setTotal(0);
 
     const bgyParam = bgy === 'All Barangays' ? undefined : bgy;
 
-    fetchVerificationStatusStats(bgyParam)
+    fetchVerificationStatusStats(bgyParam, role)
       .then((res) => {
         if (!isMounted) return;
         setStats(res.stats || { verified: 0, pending: 0, unverified: 0, rejected: 0 });
@@ -112,19 +116,13 @@ export const VerificationStatusChart: React.FC = () => {
       .finally(() => {
         if (isMounted) {
           setIsLoading(false);
-          setHasInitialLoaded(true);
         }
       });
 
     return () => {
       isMounted = false;
     };
-  }, []);
-
-  useEffect(() => {
-    const cleanup = loadStats(activeBarangay);
-    return cleanup;
-  }, [activeBarangay, loadStats]);
+  }, [activeBarangay, role, attempt]);
 
   const cleanBarangayName = (name?: string) => (name || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim();
 
@@ -176,8 +174,8 @@ export const VerificationStatusChart: React.FC = () => {
         <div className="relative">
           <select
             value={activeBarangay}
-            onChange={(e) => setActiveBarangay(e.target.value)}
-            disabled={barangayOptions.length === 0}
+            onChange={(e) => { setActiveBarangay(e.target.value); setSelectedBarangay(e.target.value); }}
+            disabled={currentUser?.role === 'ADMIN' || barangayOptions.length === 0}
             className="appearance-none bg-[#F4F4F0] hover:bg-[#EAEAE5] text-zinc-800 text-xs font-black font-display py-1.5 pl-3 pr-7 rounded-full border border-zinc-200/60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {barangayOptions.map((bgy) => (
@@ -190,6 +188,12 @@ export const VerificationStatusChart: React.FC = () => {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2 mb-4" aria-label="Filter verification by role">
+        {(['All Roles', 'Kasambahay', 'Homeowner'] as const).map(value => <button key={value} type="button"
+          aria-pressed={role === value} onClick={() => setRole(value)}
+          className={`px-3 py-2 rounded-full text-xs font-bold transition-colors ${role === value ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-orange-100'}`}>{value}</button>)}
+      </div>
+      <p className="text-xs text-zinc-500 mb-3">{role === 'Kasambahay' ? 'NBI and Police clearances' : role === 'Homeowner' ? 'National ID: front and back' : 'Required credentials for Homeowners and Kasambahays'}</p>
       {/* Main Content Area */}
       <div className="relative w-full flex-1 flex flex-col justify-center min-h-[210px]">
         {/* Error State with Retry Button */}
@@ -199,14 +203,14 @@ export const VerificationStatusChart: React.FC = () => {
             <p className="text-xs font-bold text-zinc-800 mb-1">Failed to Load Verification Stats</p>
             <p className="text-[11px] text-zinc-500 max-w-xs mb-3">{error}</p>
             <button
-              onClick={() => loadStats(activeBarangay)}
+              onClick={() => loadStats()}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white text-xs font-bold rounded-full transition-all shadow-sm shadow-orange-500/20 cursor-pointer"
             >
               <RotateCw className="w-3 h-3" />
               <span>Try Again</span>
             </button>
           </div>
-        ) : !hasInitialLoaded && isLoading ? (
+        ) : isLoading ? (
           /* Shimmer Loading Skeleton matching horizontal row layout */
           <div className="my-auto space-y-3 py-1">
             {[1, 2, 3, 4].map((i) => (

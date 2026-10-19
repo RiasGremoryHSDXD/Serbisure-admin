@@ -5,6 +5,7 @@ import { StatCard } from '../components/dashboard/StatCard';
 import { EmploymentTrendChart } from '../components/dashboard/EmploymentTrendChart';
 import { VerificationStatusChart } from '../components/dashboard/VerificationStatusChart';
 import { DashboardActivityTable } from '../components/dashboard/DashboardActivityTable';
+import { SkillsDistributionPanel } from '../components/dashboard/SkillsDistributionPanel';
 
 export const DashboardPage: React.FC = () => {
   const {
@@ -30,7 +31,7 @@ export const DashboardPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-black font-display text-[#0D0D11] tracking-tight">
-            {isSuperadmin ? 'City Dashboard' : `Brgy. ${selectedBarangay} Dashboard`}
+            Kasambahay Workforce
           </h1>
           <p className="text-xs text-zinc-400 mt-1 font-medium">
             {isSuperadmin ? 'City-wide administration across all Cagayan de Oro barangays' : `Local LGU operational jurisdiction for Brgy. ${selectedBarangay}`}
@@ -59,7 +60,7 @@ export const DashboardPage: React.FC = () => {
           color="peach"
         />
         <StatCard
-          label="CURRENTLY EMPLOYED"
+          label="CURRENTLY EMPLOYED (OCCUPIED)"
           value={totalEmployed}
           icon={Briefcase}
           color="mint"
@@ -74,6 +75,8 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      <p className="text-xs text-zinc-500">Only workers with both NBI and Police clearances verified are counted. Occupied and Available follow the worker’s status toggle.</p>
+
       {/* Analytics Trends & Verification Funnel */}
       <div className="space-y-6">
         {/* Middle Row: Employment Trends (50%) + Verification Status (50%) */}
@@ -86,6 +89,7 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
+        <SkillsDistributionPanel />
         {/* Bottom Row: Rich Activity & Statutory Compliance Table */}
         <DashboardActivityTable />
       </div>

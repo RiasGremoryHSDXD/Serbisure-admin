@@ -43,7 +43,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
         </button>
 
         <span className="text-sm sm:text-base md:text-lg font-black font-display text-[#0D0D11] tracking-tight capitalize truncate">
-          {activeNav === 'dashboard' ? (currentRole === 'SUPERADMIN' ? 'City Dashboard' : `Brgy. ${selectedBarangay}`) : activeNav === 'account-access' ? 'Account Access' : activeNav}
+          {activeNav === 'dashboard' ? 'Kasambahay Workforce' : activeNav === 'account-access' ? 'Account Access' : activeNav}
         </span>
       </div>
 

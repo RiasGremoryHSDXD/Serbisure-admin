@@ -39,6 +39,12 @@ export interface DashboardMetrics {
 export interface DashboardStatsResponse {
   metrics: DashboardMetrics;
   barangays: BarangayStats[];
+  skills?: SkillsDistribution;
+}
+
+export interface SkillsDistribution {
+  totalWorkers: number;
+  categories: { category: string; count: number; percentage: number }[];
 }
 
 export interface VerificationRequest {
