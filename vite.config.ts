@@ -16,6 +16,12 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
           secure: true,
+        },
+        '/ws': {
+          target: apiTarget,
+          changeOrigin: true,
+          ws: true,
+          secure: false,
         }
       }
     }

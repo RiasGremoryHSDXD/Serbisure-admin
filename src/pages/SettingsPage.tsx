@@ -1185,7 +1185,7 @@ export const SettingsPage: React.FC = () => {
           onClick={() => setShowAddBarangay(false)}
         >
           <div
-            className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl space-y-5"
+            className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain shadow-2xl space-y-5"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}

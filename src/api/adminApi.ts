@@ -1,4 +1,5 @@
 import { parseChatInbox } from '../data/chatInbox';
+import { createRequestId } from '../utils/requestId';
 import { fetchApi, sanitizeUserFriendlyError } from './apiClient';
 export { sanitizeUserFriendlyError };
 import { VerificationRequest, UserProfile, DashboardStatsResponse, BookingCompliance, AuditLogEntry, ChatInboxEntry } from '../types/admin';
@@ -223,7 +224,7 @@ export async function sendChatMessage(
   receiverId: string,
   messagePayload: string
 ): Promise<ChatMessage> {
-  const idempotencyKey = crypto.randomUUID();
+  const idempotencyKey = createRequestId();
   const res = await fetchApi<{ message: string; data: ChatMessage; language_warning?: string | null }>(
     '/api/v1/chat/send/',
     {
@@ -247,7 +248,7 @@ export async function sendChatImageMessage(
   imageFile: File,
   caption?: string
 ): Promise<ChatMessage> {
-  const idempotencyKey = crypto.randomUUID();
+  const idempotencyKey = createRequestId();
   const formData = new FormData();
   formData.append('receiver_id', receiverId);
   formData.append('image', imageFile);

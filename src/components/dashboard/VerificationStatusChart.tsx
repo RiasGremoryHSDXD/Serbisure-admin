@@ -155,11 +155,11 @@ export const VerificationStatusChart: React.FC = () => {
   }, [barangays, userBarangays, activeBarangay]);
 
   return (
-    <div className="bg-white rounded-3xl p-6 sm:p-7 flex flex-col justify-between h-full relative shadow-sm border border-zinc-100">
+    <div className="min-w-0 bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-7 flex flex-col h-full relative shadow-sm border border-zinc-100">
       {/* Header: Title, Loading Indicator & Barangay Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2.5">
-          <h3 className="text-lg font-black font-display text-[#0D0D11] tracking-tight">
+          <h3 className="text-base sm:text-lg font-black font-display text-[#0D0D11] tracking-tight">
             Verification Status
           </h3>
           {isLoading && (
@@ -171,12 +171,13 @@ export const VerificationStatusChart: React.FC = () => {
         </div>
 
         {/* Barangay Selector */}
-        <div className="relative">
+        <div className="relative min-w-0 w-full sm:w-auto">
           <select
             value={activeBarangay}
             onChange={(e) => { setActiveBarangay(e.target.value); setSelectedBarangay(e.target.value); }}
             disabled={currentUser?.role === 'ADMIN' || barangayOptions.length === 0}
-            className="appearance-none bg-[#F4F4F0] hover:bg-[#EAEAE5] text-zinc-800 text-xs font-black font-display py-1.5 pl-3 pr-7 rounded-full border border-zinc-200/60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Filter verification status by barangay"
+            className="appearance-none min-h-10 w-full sm:w-auto max-w-full bg-[#F4F4F0] hover:bg-[#EAEAE5] text-zinc-800 text-xs font-bold font-display py-2 pl-3 pr-7 rounded-xl sm:rounded-full border border-zinc-200/60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {barangayOptions.map((bgy) => (
               <option key={bgy} value={bgy}>
@@ -188,14 +189,14 @@ export const VerificationStatusChart: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-4" aria-label="Filter verification by role">
+      <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-1.5 sm:gap-2 mb-3" aria-label="Filter verification by role">
         {(['All Roles', 'Kasambahay', 'Homeowner'] as const).map(value => <button key={value} type="button"
           aria-pressed={role === value} onClick={() => setRole(value)}
-          className={`px-3 py-2 rounded-full text-xs font-bold transition-colors ${role === value ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-orange-100'}`}>{value}</button>)}
+          className={`min-h-10 min-w-0 px-1.5 sm:px-3 py-2 rounded-xl sm:rounded-full text-[11px] sm:text-xs font-bold transition-colors ${role === value ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-orange-100'}`}>{value}</button>)}
       </div>
-      <p className="text-xs text-zinc-500 mb-3">{role === 'Kasambahay' ? 'NBI and Police clearances' : role === 'Homeowner' ? 'National ID: front and back' : 'Required credentials for Homeowners and Kasambahays'}</p>
+      <p className="text-[11px] sm:text-xs leading-5 text-zinc-500 mb-3">{role === 'Kasambahay' ? 'NBI and Police clearances' : role === 'Homeowner' ? 'National ID: front and back' : 'Required credentials for Homeowners and Kasambahays'}</p>
       {/* Main Content Area */}
-      <div className="relative w-full flex-1 flex flex-col justify-center min-h-[210px]">
+      <div className="relative w-full flex-1 flex flex-col justify-center min-h-0 sm:min-h-[210px]">
         {/* Error State with Retry Button */}
         {error ? (
           <div className="flex flex-col items-center justify-center p-6 text-center my-auto min-h-[190px] bg-red-50/50 rounded-2xl border border-red-100">
@@ -253,12 +254,12 @@ export const VerificationStatusChart: React.FC = () => {
                 <div
                   key={s.key}
                   onMouseEnter={() => setHoveredIdx(idx)}
-                  className={`group relative flex items-center gap-3 p-2.5 sm:p-3 rounded-2xl transition-all duration-150 cursor-pointer ${
+                  className={`group relative grid grid-cols-[minmax(0,1fr)_auto_auto] sm:flex items-center gap-x-2 gap-y-2 sm:gap-3 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl transition-all duration-150 cursor-pointer ${
                     isHovered ? 'bg-[#F6F5F2]' : 'hover:bg-[#F6F5F2]/50'
                   }`}
                 >
                   {/* Status Indicator & Label */}
-                  <div className="flex items-center gap-2.5 w-28 sm:w-32 shrink-0">
+                  <div className="flex min-w-0 items-center gap-2 sm:gap-2.5 sm:w-32 shrink-0">
                     <span
                       className="w-2.5 h-2.5 rounded-full transition-transform duration-200 shrink-0"
                       style={{
@@ -281,7 +282,7 @@ export const VerificationStatusChart: React.FC = () => {
                   </span>
 
                   {/* Horizontal Bar Track */}
-                  <div className="flex-1 h-2.5 bg-[#F0F0EC] rounded-full overflow-hidden relative">
+                  <div className="col-span-3 row-start-2 sm:order-none order-last w-full sm:w-auto sm:flex-1 h-2 sm:h-2.5 bg-[#F0F0EC] rounded-full overflow-hidden relative">
                     <div
                       className={`h-full rounded-full bg-gradient-to-r ${s.barGradient} transition-all duration-500 ease-out`}
                       style={{
@@ -350,7 +351,7 @@ export const VerificationStatusChart: React.FC = () => {
           <span>Total Registered:</span>
           <span className="font-black text-[#0D0D11]">{total} accounts</span>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        <div className="hidden sm:flex flex-wrap items-center gap-1.5 sm:gap-2">
           {STATUS_CONFIG.map((s) => (
             <span
               key={s.key}

@@ -34,7 +34,12 @@ function resolveBaseUrl(): string {
   return VERCEL_API_URL;
 }
 
-export const API_BASE_URL = resolveBaseUrl();
+const configuredBaseUrl = resolveBaseUrl();
+// A phone's localhost is the phone itself. During local development, Vite
+// forwards API and WebSocket requests from the page's origin to the PC backend.
+const useDevProxy = import.meta.env.DEV && typeof window !== 'undefined' &&
+  ['localhost', '127.0.0.1', '[::1]'].includes(new URL(configuredBaseUrl).hostname);
+export const API_BASE_URL = useDevProxy ? window.location.origin : configuredBaseUrl;
 
 /**
  * Normalizes and sanitizes endpoints to prevent malformed double slashes or missing leading slashes.

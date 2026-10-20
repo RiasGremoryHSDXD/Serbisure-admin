@@ -47,10 +47,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside 
-      className={`bg-white flex flex-col justify-between select-none shrink-0 overflow-y-auto overflow-x-hidden transition-all duration-300 ease-in-out fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-screen shadow-2xl md:shadow-none md:static md:sticky md:top-0 md:z-40 p-6 ${
-        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      className={`bg-white flex flex-col justify-between gap-6 select-none shrink-0 overflow-y-auto overscroll-contain overflow-x-hidden transition-all duration-300 ease-in-out fixed inset-y-0 left-0 z-50 w-72 max-w-[calc(100vw-3rem)] lg:max-w-none h-dvh shadow-2xl lg:shadow-none lg:static lg:sticky lg:top-0 lg:z-40 p-5 lg:p-6 ${
+        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       } ${
-        isSidebarCollapsed ? 'md:w-16 md:px-2.5 md:py-5 md:items-center' : 'md:w-68 md:p-6'
+        isSidebarCollapsed ? 'lg:w-16 lg:px-2.5 lg:py-5 lg:items-center' : 'lg:w-64 lg:p-6'
       }`}
     >
       {/* Top Section */}
@@ -59,12 +59,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Toggle Button & Brand Header */}
         <div className="w-full">
           {/* Header Controls: Mobile Close Button & Desktop Collapse Toggle */}
-          <div className="flex items-center justify-between md:justify-end mb-2">
+          <div className="flex items-center justify-end mb-2">
             {/* Mobile Close Button */}
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen && setIsMobileMenuOpen(false)}
-              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors cursor-pointer md:hidden"
+              className="h-10 w-10 flex items-center justify-center rounded-full bg-[#F6F5F2] text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors cursor-pointer lg:hidden"
               title="Close menu"
               aria-label="Close menu"
             >
@@ -72,7 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             {/* Desktop Collapse/Expand Toggle Button */}
-            <div className={`hidden md:flex items-center ${isSidebarCollapsed ? 'justify-center w-full mb-1' : 'justify-end'}`}>
+            <div className={`hidden lg:flex items-center ${isSidebarCollapsed ? 'justify-center w-full mb-1' : 'justify-end'}`}>
               <button
                 type="button"
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -88,16 +88,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          <div className={`flex items-center ${isSidebarCollapsed ? 'md:justify-center' : 'gap-3'} gap-3`}>
+          <div className={`flex items-center ${isSidebarCollapsed ? 'lg:justify-center' : 'gap-3'} gap-3`}>
             <img 
               src="/serbisure_new_clean.png" 
               alt="SerbiSure Logo" 
-              className={`${isSidebarCollapsed ? 'md:w-9 md:h-9' : 'w-10 h-10'} w-10 h-10 object-contain shrink-0`}
+              className={`${isSidebarCollapsed ? 'lg:w-9 lg:h-9' : 'w-10 h-10'} w-10 h-10 object-contain shrink-0`}
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).src = '/serbisure-logo.png';
               }}
             />
-            <div className={`min-w-0 ${isSidebarCollapsed ? 'md:hidden' : 'block'}`}>
+            <div className={`min-w-0 ${isSidebarCollapsed ? 'lg:hidden' : 'block'}`}>
               <span className="text-2xl font-black font-display text-[#0D0D11] tracking-tight block leading-tight">
                 Serbi<span className="text-[#FFB380]">Sure</span><span className="text-[#FFB380]">.</span>
               </span>
@@ -109,7 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Navigation Menu */}
-        <nav className="space-y-1.5 w-full">
+        <nav className="space-y-2 w-full">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeNav === item.id;
@@ -121,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 aria-label={item.id === 'users' ? `Users, ${unreadChatCount} unread messages` : item.label}
                 className={
                   isSidebarCollapsed
-                    ? `relative w-full md:w-10 md:h-10 md:rounded-full md:mx-auto flex items-center justify-between md:justify-center px-4 py-2.5 md:p-0 rounded-full text-[13px] md:text-xs font-bold font-display tracking-tight transition-all duration-150 cursor-pointer ${
+                    ? `relative w-full lg:w-10 lg:h-10 lg:rounded-full lg:mx-auto flex items-center justify-between lg:justify-center px-4 py-2.5 lg:p-0 rounded-full text-[13px] lg:text-xs font-bold font-display tracking-tight transition-all duration-150 cursor-pointer ${
                         isActive
                           ? 'bg-[#0D0D11] text-white'
                           : 'text-zinc-600 hover:bg-[#F6F5F2] hover:text-zinc-900'
@@ -134,13 +134,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }
               >
                 {/* On mobile, or when expanded on desktop, show icon + label + badge */}
-                <div className={`flex items-center gap-3 ${isSidebarCollapsed ? 'md:hidden' : 'flex'}`}>
+                <div className={`flex items-center gap-3 ${isSidebarCollapsed ? 'lg:hidden' : 'flex'}`}>
                   <Icon className={`w-4 h-4 ${isActive ? 'text-[#FFB380]' : 'text-zinc-400'}`} />
                   <span>{item.label}</span>
                 </div>
                 {item.badge !== undefined && item.badge > 0 && (
                   <span className={`px-2 py-0.5 text-[11px] rounded-full font-black ${
-                    isSidebarCollapsed ? 'md:hidden' : ''
+                    isSidebarCollapsed ? 'lg:hidden' : ''
                   } ${
                     isActive ? 'bg-[#FFB380] text-white' : 'bg-zinc-100 text-zinc-700'
                   }`}>
@@ -150,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                 {/* Desktop collapsed icon-only view */}
                 {isSidebarCollapsed && (
-                  <div className="relative hidden md:flex items-center justify-center">
+                  <div className="relative hidden lg:flex items-center justify-center">
                     <Icon className={`w-4 h-4 ${isActive ? 'text-[#FFB380]' : 'text-zinc-400'}`} />
                     {item.badge !== undefined && item.badge > 0 && (
                       <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-[#FFB380] text-white text-[9px] font-black flex items-center justify-center leading-none">
@@ -170,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {isSidebarCollapsed ? (
           <>
             {/* Desktop collapsed icon-only profile */}
-            <div className="hidden md:flex flex-col items-center gap-2 p-1.5 rounded-2xl bg-[#F6F5F2]">
+            <div className="hidden lg:flex flex-col items-center gap-2 p-1.5 rounded-2xl bg-[#F6F5F2]">
               <img
                 src={currentUser?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"}
                 alt="Admin Profile"
@@ -187,7 +187,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             {/* Mobile full profile */}
-            <div className="flex md:hidden items-center justify-between p-2.5 rounded-3xl bg-[#F6F5F2]">
+            <div className="flex lg:hidden items-center justify-between p-2.5 rounded-3xl bg-[#F6F5F2]">
               <div className="flex items-center gap-2.5 min-w-0">
                 <img
                   src={currentUser?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"}

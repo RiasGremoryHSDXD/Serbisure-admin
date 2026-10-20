@@ -19,7 +19,7 @@ export function RemoveMessageDialog({ busy, error, onCancel, onRemove }: {
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 p-4"
       onClick={event => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
       <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="remove-message-title" aria-describedby="remove-message-description" aria-busy={busy}
-        className="w-full max-w-md rounded-2xl bg-white shadow-xl"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl bg-white shadow-xl"
         onKeyDown={event => {
           if (event.key === 'Escape' && !busy) { event.preventDefault(); onCancel(); }
           if (event.key === 'Tab') {

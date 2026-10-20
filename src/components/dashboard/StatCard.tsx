@@ -5,6 +5,7 @@ export type StatCardColor = 'peach' | 'mint' | 'sky' | 'lavender' | 'yellow';
 
 interface StatCardProps {
   label: string;
+  mobileLabel?: string;
   value: string | number;
   icon: LucideIcon;
   trend?: string;
@@ -49,6 +50,7 @@ const COLOR_THEMES: Record<
 
 export const StatCard: React.FC<StatCardProps> = ({
   label,
+  mobileLabel,
   value,
   icon: Icon,
   trend,
@@ -59,19 +61,19 @@ export const StatCard: React.FC<StatCardProps> = ({
 
   return (
     <div
-      className={`${theme.bg} rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-transform hover:-translate-y-0.5`}
+      className={`${theme.bg} h-full min-w-0 rounded-2xl sm:rounded-3xl p-4 sm:p-7 flex flex-col justify-between transition-transform hover:-translate-y-0.5`}
     >
       <div>
         <span
-          className={`text-xs font-black font-display tracking-wider uppercase ${theme.label}`}
+          className={`text-xs font-bold font-display sm:tracking-wider sm:uppercase ${theme.label}`}
         >
-          {label}
+          {mobileLabel ? <><span className="sm:hidden">{mobileLabel}</span><span className="hidden sm:inline">{label}</span></> : label}
         </span>
       </div>
 
-      <div className="flex items-end justify-between gap-4 mt-5">
-        <div>
-          <div className="text-3xl sm:text-4xl font-black font-display text-[#0D0D11] tracking-tight">
+      <div className="flex items-end justify-between gap-2 mt-3 sm:mt-5">
+        <div className="min-w-0">
+          <div className={`${typeof value === 'number' ? 'text-3xl sm:text-4xl' : 'text-sm sm:text-lg'} break-words font-black font-display text-[#0D0D11] tracking-tight`}>
             {typeof value === 'number' ? value.toLocaleString() : value}
           </div>
           {trend && (
@@ -86,7 +88,7 @@ export const StatCard: React.FC<StatCardProps> = ({
         </div>
 
         <Icon
-          className={`w-13 h-13 sm:w-14 sm:h-14 ${theme.icon} shrink-0`}
+          className={`w-6 h-6 sm:w-12 sm:h-12 ${theme.icon} shrink-0`}
           strokeWidth={1.8}
         />
       </div>
