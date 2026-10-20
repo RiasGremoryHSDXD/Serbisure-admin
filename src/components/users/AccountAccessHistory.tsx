@@ -7,7 +7,7 @@ import { fetchAllAccessHistory } from '../../api/moderationApi';
 import { useAccessHistory } from '../../hooks/useAccessHistory';
 
 const secondary = 'rounded-full bg-zinc-100 px-4 py-2.5 text-sm font-semibold text-zinc-600 hover:bg-zinc-200 disabled:opacity-40';
-const field = 'w-full rounded-2xl bg-white px-4 py-3 text-sm text-zinc-700 outline-none focus-visible:ring-2 focus-visible:ring-[#FFB380]';
+const field = 'w-full min-w-0 min-h-11 rounded-2xl bg-white px-3 sm:px-4 py-3 text-sm text-zinc-700 outline-none focus-visible:ring-2 focus-visible:ring-[#FFB380]';
 const PAGE_SIZE = ACCESS_HISTORY_PAGE_SIZE;
 const tones: Record<AccessAction, string> = {
   pause_chat: 'bg-amber-50 text-amber-800', resume_chat: 'bg-emerald-50 text-emerald-700',
@@ -62,7 +62,7 @@ function accessHistoryExportMarkup(entries: AccessHistoryEntry[], barangay: stri
 }
 
 export function AccessHistoryTable({ entries }: { entries: AccessHistoryPage['results'] }): React.ReactElement {
-  return <div className="px-4 pb-2 pt-6 sm:px-6">
+  return <div className="px-3 pb-2 pt-3 sm:pt-6 sm:px-6">
     <h2 className="sr-only">Recent access changes</h2>
     <div className="overflow-x-hidden md:overflow-x-auto" role="region" aria-label="Recent access changes">
       <table className="block w-full text-left text-xs md:table">
@@ -75,39 +75,39 @@ export function AccessHistoryTable({ entries }: { entries: AccessHistoryPage['re
             <th className="px-3 pb-3 text-right">Timestamp</th>
           </tr>
         </thead>
-        <tbody className="block divide-y divide-zinc-100 font-medium text-zinc-700 md:table-row-group">
+        <tbody className="grid gap-3 font-medium text-zinc-700 md:table-row-group">
           {entries.map(entry => {
             const initials = entry.actor_name.split(' ').map(part => part[0]).slice(0, 2).join('').toUpperCase() || 'OF';
             const [from, to] = transitionFor(entry);
-            return <tr key={entry.log_id} className="grid grid-cols-2 gap-x-4 gap-y-4 p-4 transition-colors hover:bg-[#F6F5F2] md:table-row md:p-0">
+            return <tr key={entry.log_id} className="grid grid-cols-2 gap-3 rounded-2xl border border-zinc-100 p-3 transition-colors hover:bg-[#F6F5F2] md:table-row md:border-0 md:p-0">
               <td className="col-span-2 block rounded-l-2xl px-0 py-0 align-top md:table-cell md:px-3 md:py-4">
                 <div className="flex items-center gap-2.5">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-[10px] font-black text-white" aria-hidden="true">{initials}</span>
                   <div className="min-w-0">
-                    <span className="block truncate font-bold text-zinc-900">{entry.actor_name}</span>
+                    <span className="block break-words font-bold text-zinc-900">{entry.actor_name}</span>
                     <span className="mt-0.5 block text-[10px] uppercase text-zinc-400">Official</span>
                   </div>
                 </div>
               </td>
-              <td className="block px-0 py-0 align-top md:table-cell md:px-3 md:py-4">
+              <td className="col-span-2 block min-w-0 px-0 py-0 align-top md:table-cell md:px-3 md:py-4">
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 md:hidden">Action</p>
                 <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tones[entry.action]}`}>{accessActionLabels[entry.action]}</span>
               </td>
-              <td className="block px-0 py-0 align-top md:table-cell md:px-3 md:py-4">
+              <td className="col-span-2 block min-w-0 [overflow-wrap:anywhere] px-0 py-0 align-top md:table-cell md:px-3 md:py-4">
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 md:hidden">User</p>
                 <span className="block font-bold text-zinc-900">{entry.target_name}</span>
                 <span className="mt-1 block text-[11px] text-zinc-500">{entry.target_role} · {historyBarangay(entry.target_barangay)}</span>
               </td>
               <td className="col-span-2 block px-0 py-0 align-top md:table-cell md:px-3 md:py-4">
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 md:hidden">Change</p>
-                <div className="flex items-center gap-1 text-[11px]">
+                <div className="flex flex-wrap items-center gap-1 text-[11px]">
                   <span className="text-zinc-400">{from}</span><span className="font-bold text-zinc-300">→</span><span className={`font-bold ${entry.action === 'suspend_account' ? 'text-rose-600' : entry.action === 'pause_chat' ? 'text-amber-700' : 'text-emerald-700'}`}>{to}</span>
                 </div>
                 {entry.action === 'pause_chat' && entry.new_state.chat_suspended_until && <p className="mt-1 text-[10px] text-zinc-400">Until {historyDate(entry.new_state.chat_suspended_until)}</p>}
               </td>
               <td className="col-span-2 block rounded-r-2xl border-t border-zinc-100 px-0 pt-3 text-left align-top md:table-cell md:border-0 md:px-3 md:py-4 md:text-right">
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400 md:hidden">Timestamp</p>
-                <time dateTime={entry.created_at} className="block whitespace-nowrap text-[11px] font-semibold text-zinc-600">{historyDate(entry.created_at)}</time>
+                <time dateTime={entry.created_at} className="block text-[11px] font-semibold text-zinc-600">{historyDate(entry.created_at)}</time>
                 <span className="mt-1 block text-[9px] text-zinc-400">ID #{entry.log_id.slice(-6)}</span>
               </td>
             </tr>;
@@ -167,9 +167,9 @@ export function AccountAccessHistory({ accountId, role, barangay, revision }: Pr
       window.setTimeout(() => setExportMessage(null), 4000);
     }
   };
-  return <div className="space-y-6" aria-label="Account access history">
-    <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-      <label className="relative"><span className="sr-only">Search history by user, official or barangay</span><Search aria-hidden="true" size={18} className="pointer-events-none absolute left-4 top-3.5 text-zinc-400" /><input maxLength={200} className={`${field} pl-12`} value={search} onChange={event => setSearch(event.target.value)} placeholder="Search user, official or barangay" /></label>
+  return <div className="min-w-0 space-y-5 sm:space-y-6" aria-label="Account access history">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2.5 sm:gap-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <label className="relative min-w-0 col-span-2 sm:col-span-1"><span className="sr-only">Search history by user, official or barangay</span><Search aria-hidden="true" size={18} className="pointer-events-none absolute left-4 top-3.5 text-zinc-400" /><input maxLength={200} className={`${field} pl-12 sm:pl-12`} value={search} onChange={event => setSearch(event.target.value)} placeholder="Search user, official or barangay" /></label>
       <label className="relative"><span className="sr-only">Filter history by action</span><select className={`${field} appearance-none pr-12`} value={filters.action} onChange={event => setFilters(value => ({ ...value, action: event.target.value as AccessAction | '', page: 1 }))}>
         <option value="">All changes</option>{(Object.entries(accessActionLabels) as [AccessAction, string][]).map(([action, label]) => <option key={action} value={action}>{label}</option>)}
       </select><ChevronDown aria-hidden="true" size={18} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500" /></label>
@@ -182,7 +182,7 @@ export function AccountAccessHistory({ accountId, role, barangay, revision }: Pr
       {exportMessage.startsWith('Export failed') || exportMessage.startsWith('No data') ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
       <span>{exportMessage}</span>
     </div>}
-    <div className="overflow-hidden rounded-3xl bg-white" aria-busy={history.loading}>
+    <div className="overflow-hidden rounded-2xl sm:rounded-3xl bg-white" aria-busy={history.loading}>
       {history.error && <div role="alert" className="flex flex-wrap items-center justify-between gap-4 p-6"><p className="text-sm text-red-700">{history.error}</p><button type="button" className={secondary} onClick={history.refresh}>Retry</button></div>}
       {!history.data && !history.error && <p role="status" className="p-6 text-sm text-zinc-500">Loading access history…</p>}
       {history.data && !rows.length && <div className="space-y-2 p-6"><h2 className="font-semibold">{filters.search || filters.action ? 'No matching changes' : 'No access changes yet'}</h2><p className="text-sm text-zinc-500">{filters.search || filters.action ? 'Try another search or select all changes.' : 'Suspensions and restorations will appear here.'}</p></div>}

@@ -49,17 +49,17 @@ export const DocumentPreview: React.FC = () => {
     const isKasambahay = selectedItem.role === 'KASAMBAHAY';
     return (
       <>
-        <div className="bg-white rounded-3xl p-6 sm:p-8 h-full flex flex-col justify-between overflow-y-auto">
+        <div className="verification-preview min-w-0 bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 h-full flex flex-col justify-between">
         <div>
           {/* Header Bar */}
           <div className="pb-5 border-b border-zinc-100">
-            <div className="flex items-center justify-between gap-3 mb-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-1.5">
               <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 font-display">
                 Resident Profile
               </span>
 
               {/* Minimalist, cleanly centered badges */}
-              <div className="flex items-center gap-1.5 shrink-0 flex-nowrap">
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                 <span className="inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full bg-[#F0F0EC] text-zinc-600 text-xs font-semibold whitespace-nowrap">
                   <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
                   <span>Brgy. {(selectedItem.barangay || 'Unassigned').replace(/^Brgy\.?\s*/i, '')}</span>
@@ -123,8 +123,8 @@ export const DocumentPreview: React.FC = () => {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-base font-black font-display text-zinc-900 leading-tight truncate">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-base font-black font-display text-zinc-900 leading-tight break-words">
                     {selectedItem.name}
                   </div>
                   <button
@@ -137,7 +137,7 @@ export const DocumentPreview: React.FC = () => {
                     <span>Inspect Photo</span>
                   </button>
                 </div>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1">
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-zinc-200 text-zinc-800">
                     {isKasambahay ? 'Kasambahay Worker' : 'Homeowner'}
                   </span>
@@ -460,15 +460,15 @@ export const DocumentPreview: React.FC = () => {
 
   return (
     <>
-      <div className="bg-white rounded-3xl p-8 flex flex-col justify-between h-full">
+      <div className="verification-preview min-w-0 bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 flex flex-col justify-between h-full">
         <div>
           {/* Title and Barangay */}
-          <div className="flex items-center justify-between pb-5 border-b border-zinc-100">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-zinc-100">
             <h3 className="text-xl font-black font-display text-[#0D0D11] tracking-tight">
               Document Preview
             </h3>
-            <div className="flex items-center gap-1.5 shrink-0 flex-nowrap">
-              <span className="inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full bg-[#F0F0EC] text-zinc-600 text-xs font-semibold whitespace-nowrap">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+              <span className="inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full bg-[#F0F0EC] text-zinc-600 text-xs font-semibold break-words">
                 <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
                 <span>Brgy. {(selectedItem.barangay || 'Pagatpat').replace(/^Brgy\.?\s*/i, '')}</span>
               </span>
@@ -490,11 +490,11 @@ export const DocumentPreview: React.FC = () => {
 
           {/* Dual-document switcher toggle if secondary doc exists */}
           {hasSecondary && (
-            <div className="flex items-center justify-between mt-3 mb-1 px-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 mt-3 mb-1 px-1">
               <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider font-display">
                 {isKasambahayPackage ? 'Statutory Clearances' : 'Document Scan'}
               </span>
-              <div className="flex items-center bg-[#F0F0EC] p-0.5 rounded-full">
+              <div className="flex flex-wrap items-center gap-1 bg-[#F0F0EC] p-0.5 rounded-2xl">
                 <button
                   type="button"
                   onClick={() => setIdSide('front')}
@@ -585,8 +585,8 @@ export const DocumentPreview: React.FC = () => {
 
           {/* User Metadata & Face Liveness Card */}
           <div className="mt-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="verification-profile-summary flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-1 min-w-0 items-center gap-3">
                 {/* Interactive Clickable Profile Picture */}
                 <div 
                   onClick={() => setIsComparisonModalOpen(true)}
@@ -615,12 +615,12 @@ export const DocumentPreview: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <h4 className="text-base font-black font-display text-[#0D0D11]">
+                <div className="min-w-0">
+                  <h4 className="text-base font-black font-display text-[#0D0D11] break-words">
                     {selectedItem.name}
                   </h4>
                   {selectedItem.barangay && (
-                    <p className="text-[11px] text-zinc-700 flex items-center gap-1 mt-0.5 font-bold">
+                    <p className="text-[11px] text-zinc-700 flex flex-wrap items-center gap-1 mt-0.5 font-bold">
                       <MapPin className="w-3 h-3 text-[#FFB380] shrink-0" />
                       <span>Brgy. {selectedItem.barangay}</span>
                       {selectedItem.hasLguCoverage === false && (
@@ -633,13 +633,13 @@ export const DocumentPreview: React.FC = () => {
                   {selectedItem.email && (
                     <p className="text-[11px] text-zinc-500 flex items-center gap-1 mt-0.5 font-medium">
                       <Mail className="w-3 h-3 text-zinc-400 shrink-0" />
-                      <span className="truncate max-w-[200px]">{selectedItem.email}</span>
+                      <span className="min-w-0 [overflow-wrap:anywhere]">{selectedItem.email}</span>
                     </p>
                   )}
                   {selectedItem.contactNumber && (
                     <p className="text-[11px] text-zinc-500 flex items-center gap-1 mt-0.5 font-medium">
                       <Phone className="w-3 h-3 text-zinc-400 shrink-0" />
-                      <span className="font-mono">{selectedItem.contactNumber}</span>
+                      <span className="min-w-0 font-mono [overflow-wrap:anywhere]">{selectedItem.contactNumber}</span>
                     </p>
                   )}
                   <span className="inline-block text-[10px] font-black uppercase px-2 py-0.5 rounded-full mt-1 bg-zinc-100 text-zinc-600">
@@ -652,7 +652,7 @@ export const DocumentPreview: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsComparisonModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF4ED] hover:bg-[#FFE5D6] text-[#E07A38] hover:text-[#C86423] rounded-full text-[11px] font-black font-display transition-all cursor-pointer border-0 shadow-xs"
+                className="verification-compare-button inline-flex shrink-0 min-h-10 justify-center items-center gap-1.5 px-3 py-2 bg-[#FFF4ED] hover:bg-[#FFE5D6] text-[#E07A38] hover:text-[#C86423] rounded-full text-[11px] font-black font-display transition-all cursor-pointer border-0 shadow-xs"
                 title="Open Side-by-Side Face & Identity Comparison"
               >
                 <UserCheck className="w-3.5 h-3.5" />
@@ -661,7 +661,7 @@ export const DocumentPreview: React.FC = () => {
             </div>
 
             {/* Details list (Clean, airy key-value block without grey zebra stripes) */}
-            <div className="space-y-2.5 text-xs pt-3 border-t border-zinc-100">
+            <div className="verification-document-fields space-y-2.5 text-xs pt-3 border-t border-zinc-100">
               <div className="flex justify-between items-center py-0.5">
                 <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider font-display">ID Name</span>
                 <span className="font-bold text-[#0D0D11] text-xs font-display">{idName}</span>
@@ -843,8 +843,10 @@ export const DocumentPreview: React.FC = () => {
               </div>
 
               {/* Optional Reason Input with Integrated Send Button */}
-              <div className="relative flex items-center bg-zinc-100 rounded-full p-1 pl-4 focus-within:ring-2 focus-within:ring-[#FFB380]/40 transition-all">
+              <div className="flex flex-wrap items-center gap-2 bg-zinc-100 rounded-2xl p-3 focus-within:ring-2 focus-within:ring-[#FFB380]/40 transition-all">
+                <label htmlFor="verification-rejection-reason" className="w-full text-[11px] font-bold text-zinc-600">Rejection reason (optional)</label>
                 <input
+                  id="verification-rejection-reason"
                   type="text"
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
@@ -855,12 +857,12 @@ export const DocumentPreview: React.FC = () => {
                     }
                   }}
                   placeholder={`Optional rejection reason for ${hasSecondary ? activeDocLabel : 'document'}...`}
-                  className="w-full py-2 bg-transparent text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none font-medium border-0"
+                  className="w-full min-w-0 min-h-11 px-3 py-2 rounded-xl bg-white text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none font-medium border-0"
                 />
                 <button
                   type="button"
                   onClick={handleReject}
-                  className="px-4 py-2 bg-[#0D0D11] hover:bg-black text-white text-xs font-black font-display rounded-full flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer border-0 shrink-0"
+                  className="ml-auto min-h-10 px-4 py-2 bg-[#0D0D11] hover:bg-black text-white text-xs font-black font-display rounded-full flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer border-0 shrink-0"
                   title="Submit Rejection"
                 >
                   <span>Send</span>
@@ -875,9 +877,9 @@ export const DocumentPreview: React.FC = () => {
       {/* Full-Screen Zoom Modal for Cloudinary Document Scan */}
       {showImageModal && activeImageUrl && (
         <div className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center p-4">
-          <div className="relative max-w-4xl w-full bg-[#F6F5F2] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
-            <div className="p-4 bg-white border-b border-zinc-200/70 text-zinc-950 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+          <div className="relative flex max-h-[calc(100dvh-2rem)] max-w-4xl w-full flex-col bg-[#F6F5F2] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="shrink-0 p-4 bg-white border-b border-zinc-200/70 text-zinc-950 flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0 flex flex-wrap items-center gap-3">
                 <div>
                   <h4 className="font-black font-display text-sm">{selectedItem.name} — {selectedItem.documentType}</h4>
                   <p className="text-[11px] text-zinc-500 font-medium">Authenticated Scan</p>
@@ -925,12 +927,12 @@ export const DocumentPreview: React.FC = () => {
                 </button>
               </div>
             </div>
-            <div className="p-4 max-h-[80vh] overflow-auto flex items-center justify-center bg-zinc-100">
+            <div className="min-h-0 p-4 overflow-auto overscroll-contain bg-zinc-100">
               <img
                 src={activeImageUrl}
                 alt={`Document Full Scan ${idSide}`}
                 style={{ transform: `rotate(${imageRotation}deg)`, transition: 'transform 0.25s ease' }}
-                className="max-h-[75vh] w-auto object-contain rounded-2xl"
+                className="mx-auto max-h-[75dvh] w-auto object-contain rounded-2xl"
               />
             </div>
           </div>

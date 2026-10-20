@@ -88,7 +88,7 @@ export const SuperAdminBreakdown: React.FC<SuperAdminBreakdownProps> = ({ barang
       {/* Add Barangay Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white w-full max-w-md rounded-[32px] p-7 relative ring-1 ring-black/5">
+          <div className="bg-white max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-[32px] p-7 relative ring-1 ring-black/5">
             <button
               onClick={() => setIsAddModalOpen(false)}
               className="absolute right-5 top-5 text-zinc-400 hover:text-zinc-600 p-1.5 rounded-full hover:bg-zinc-100 cursor-pointer"

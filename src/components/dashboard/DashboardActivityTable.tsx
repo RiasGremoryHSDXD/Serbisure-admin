@@ -873,12 +873,12 @@ export const DashboardActivityTable: React.FC = () => {
   );
 
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 shadow-xs border border-zinc-100/80">
+    <div className="min-w-0 bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 shadow-xs border border-zinc-100/80">
       {/* Top Tabs & Controls Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5">
         
         {/* Navigation Tabs with Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto text-xs font-extrabold font-display pb-1">
+        <div className="dashboard-activity-tabs grid grid-cols-3 sm:flex sm:flex-wrap min-w-0 gap-1.5 sm:gap-2 text-xs font-extrabold font-display pb-1">
           <button
             type="button"
             onClick={() => setActiveTab('DEPLOYMENTS')}
@@ -917,19 +917,20 @@ export const DashboardActivityTable: React.FC = () => {
         </div>
 
         {/* Right Search & Filter Pill Buttons */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative">
+        <div className="dashboard-activity-controls flex min-w-0 flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-auto">
             <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search records..."
-              className="pl-9 pr-4 py-1.5 bg-[#F0F0EC] hover:bg-[#EAEAE5] focus:bg-white rounded-full text-xs font-medium text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#FFB380]/40 transition-all"
+              aria-label="Search dashboard records"
+              className="min-h-10 w-full sm:w-auto pl-9 pr-4 py-2 bg-[#F0F0EC] hover:bg-[#EAEAE5] focus:bg-white rounded-xl sm:rounded-full text-xs font-medium text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#FFB380]/40 transition-all"
             />
           </div>
 
-          <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#F0F0EC] rounded-full text-xs font-bold text-zinc-700">
+          <div className="min-h-10 flex flex-1 sm:flex-none justify-center items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 bg-[#F0F0EC] rounded-full text-[11px] sm:text-xs whitespace-nowrap font-bold text-zinc-700">
             <Calendar className="w-3.5 h-3.5 text-[#FFB380]" />
             <span>{new Date().toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
           </div>
@@ -941,7 +942,7 @@ export const DashboardActivityTable: React.FC = () => {
             disabled={isExporting}
             title="Download current tab as PDF"
             className={clsx(
-              'flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all',
+              'min-h-10 flex flex-1 sm:flex-none justify-center items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-2 rounded-full text-[11px] sm:text-xs whitespace-nowrap font-bold transition-all',
               isExporting
                 ? 'bg-zinc-100 text-zinc-400 opacity-60 cursor-not-allowed'
                 : 'bg-[#F0F0EC] hover:bg-[#EAEAE5] text-zinc-700 cursor-pointer'
@@ -958,7 +959,7 @@ export const DashboardActivityTable: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveNav('verifications')}
-            className="flex items-center gap-1 px-4 py-1.5 bg-[#FFB380] hover:bg-[#F5A066] text-white rounded-full text-xs font-black font-display transition-transform active:scale-95 cursor-pointer"
+            className="min-h-10 flex flex-1 sm:flex-none justify-center items-center gap-1 px-2 sm:px-3 py-2 bg-[#FFB380] hover:bg-[#F5A066] text-white rounded-full text-[11px] sm:text-xs whitespace-nowrap font-black font-display transition-transform active:scale-95 cursor-pointer"
           >
             <span>Full Queue</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -1015,7 +1016,7 @@ export const DashboardActivityTable: React.FC = () => {
             </div>
           ) : (
             <>
-              <table className="w-full text-left text-xs min-w-[620px]">
+              <table className="dashboard-records w-full text-left text-xs min-w-[620px]">
                 <thead>
                   <tr className="text-zinc-400 font-extrabold font-display uppercase tracking-wider text-[11px]">
                     <th className="pb-3 px-3">Employer</th>
@@ -1028,7 +1029,7 @@ export const DashboardActivityTable: React.FC = () => {
                 <tbody className="font-medium text-zinc-700">
                   {paginatedBookings.map((b) => (
                     <tr key={b.id} className="hover:bg-[#F6F5F2] rounded-2xl transition-colors">
-                      <td className="py-3 px-3 rounded-l-2xl">
+                      <td data-label="Employer" className="py-3 px-3 rounded-l-2xl">
                         <div className="flex items-center gap-2.5">
                           <img src={b.homeownerAvatar} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
                           <span className={`font-bold font-display ${b.homeownerName === 'Unassigned' ? 'text-zinc-400 italic font-normal' : 'text-zinc-900'}`}>
@@ -1036,7 +1037,7 @@ export const DashboardActivityTable: React.FC = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="py-3 px-3">
+                      <td data-label="Kasambahay" className="py-3 px-3">
                         <div className="flex items-center gap-2.5">
                           <img src={b.workerAvatar} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
                           <span className={`font-semibold ${b.workerName === 'Unassigned' ? 'text-zinc-400 italic font-normal' : 'text-zinc-800'}`}>
@@ -1044,15 +1045,15 @@ export const DashboardActivityTable: React.FC = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="py-3 px-3 font-black font-display text-zinc-900">
+                      <td data-label="Pay" className="py-3 px-3 font-black font-display text-zinc-900">
                         ₱{b.offeredWage.toLocaleString()} / {b.ratePeriod || (b.contractType.includes('Long-Term') ? 'month' : 'day')}
                       </td>
-                      <td className="py-3 px-3">
+                      <td data-label="Contract" className="py-3 px-3">
                         <span className="px-3 py-1 rounded-full bg-zinc-100 text-zinc-800 text-[11px] font-bold">
                           {b.contractType}
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-right rounded-r-2xl">
+                      <td data-label="Status" className="py-3 px-3 text-right rounded-r-2xl">
                         {renderBookingStatusBadge(b.bookingStatus)}
                       </td>
                     </tr>
@@ -1104,7 +1105,7 @@ export const DashboardActivityTable: React.FC = () => {
             </div>
           ) : (
             <>
-              <table className="w-full text-left text-xs min-w-[580px]">
+              <table className="dashboard-records w-full text-left text-xs min-w-[580px]">
                 <thead>
                   <tr className="text-zinc-400 font-extrabold font-display uppercase tracking-wider text-[11px]">
                     <th className="pb-3 px-3">Applicant</th>
@@ -1117,7 +1118,7 @@ export const DashboardActivityTable: React.FC = () => {
                 <tbody className="font-medium text-zinc-700">
                   {paginatedVerifications.map((v) => (
                     <tr key={v.id} className="hover:bg-[#F6F5F2] rounded-2xl transition-colors">
-                      <td className="py-3 px-3 rounded-l-2xl">
+                      <td data-label="Applicant" className="py-3 px-3 rounded-l-2xl">
                         <div className="flex items-center gap-2.5">
                           <img src={v.avatar} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
                           <div>
@@ -1126,10 +1127,10 @@ export const DashboardActivityTable: React.FC = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-3 font-semibold text-zinc-800">{v.documentType}</td>
-                      <td className="py-3 px-3">{v.barangay}</td>
-                      <td className="py-3 px-3 text-zinc-400">{v.submittedDate}</td>
-                      <td className="py-3 px-3 text-right rounded-r-2xl">
+                      <td data-label="Document" className="py-3 px-3 font-semibold text-zinc-800">{v.documentType}</td>
+                      <td data-label="Barangay" className="py-3 px-3">{v.barangay}</td>
+                      <td data-label="Submitted" className="py-3 px-3 text-zinc-400">{v.submittedDate}</td>
+                      <td data-label="Status" className="py-3 px-3 text-right rounded-r-2xl">
                         <span className={`px-3 py-1 rounded-full text-[11px] font-bold ${
                           v.status === 'VERIFIED'
                             ? 'bg-emerald-50 text-emerald-700'
@@ -1194,7 +1195,7 @@ export const DashboardActivityTable: React.FC = () => {
             </div>
           ) : (
             <>
-              <table className="w-full text-left text-xs min-w-[680px]">
+              <table className="dashboard-records w-full text-left text-xs min-w-[680px]">
                 <thead>
                   <tr className="text-zinc-400 font-extrabold font-display uppercase tracking-wider text-[11px]">
                     <th className="pb-3 px-3">Official / Actor</th>
@@ -1216,7 +1217,7 @@ export const DashboardActivityTable: React.FC = () => {
                     return (
                       <tr key={log.log_id} className="hover:bg-[#F6F5F2] rounded-2xl transition-colors">
                         {/* Official / Actor */}
-                        <td className="py-3 px-3 rounded-l-2xl">
+                        <td data-label="Official" className="py-3 px-3 rounded-l-2xl">
                           <div className="flex items-center gap-2.5">
                             {log.actor_name ? (
                               <div className="w-7 h-7 rounded-full bg-zinc-900 text-white flex items-center justify-center text-[10px] font-black shrink-0">
@@ -1246,12 +1247,12 @@ export const DashboardActivityTable: React.FC = () => {
                         </td>
 
                         {/* Action Badge */}
-                        <td className="py-3 px-3">
+                        <td data-label="Action" className="py-3 px-3">
                           {renderAuditActionBadge(log.action)}
                         </td>
 
                         {/* Resident & Document */}
-                        <td className="py-3 px-3">
+                        <td data-label="Resident" className="py-3 px-3">
                           <div>
                             <div className="flex items-center gap-1.5">
                               <span className="font-bold font-display text-zinc-900">
@@ -1278,7 +1279,7 @@ export const DashboardActivityTable: React.FC = () => {
                         </td>
 
                         {/* Transition / Reason Notes */}
-                        <td className="py-3 px-3">
+                        <td data-label="Change" className="py-3 px-3">
                           <div className="max-w-xs">
                             {(log.previous_status || log.new_status) ? (
                               <div className="flex items-center gap-1 text-[11px]">
@@ -1304,7 +1305,7 @@ export const DashboardActivityTable: React.FC = () => {
                         </td>
 
                         {/* Timestamp */}
-                        <td className="py-3 px-3 text-right rounded-r-2xl">
+                        <td data-label="Recorded" className="py-3 px-3 text-right rounded-r-2xl">
                           <span className="text-[11px] font-semibold text-zinc-600 block">
                             {formatAuditDate(log.created_at)}
                           </span>

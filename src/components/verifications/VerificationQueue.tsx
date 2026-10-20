@@ -172,12 +172,12 @@ export const VerificationQueue: React.FC = () => {
   };
 
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 h-full flex flex-col">
+    <div className="verification-queue min-w-0 bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 h-full flex flex-col">
       {/* Header with Filters */}
-      <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between pb-5 gap-3.5">
+      <div className="flex flex-col items-start pb-5 gap-3.5">
         <div>
           <h3 className="text-xl font-black font-display text-[#0D0D11] tracking-tight">
-            Verification Queue
+            <span className="sm:hidden">Applicants</span><span className="hidden sm:inline">Verification Queue</span>
           </h3>
           <p className="text-xs text-zinc-400 mt-0.5 font-medium">
             {currentRole === 'SUPERADMIN' && barangayFilter !== 'ALL' && (
@@ -193,13 +193,14 @@ export const VerificationQueue: React.FC = () => {
           </p>
         </div>
 
-        {/* Filter Controls Bar - Strictly flex-nowrap so Refresh Button is always beside Recent First */}
-        <div className="flex items-center gap-2 flex-nowrap shrink-0 overflow-x-auto max-w-full py-0.5">
+        {/* Filters wrap within the panel so every control is reachable on phones. */}
+        <div className="verification-queue-filters grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_40px] sm:flex sm:flex-wrap items-center gap-2 w-full py-0.5">
           {/* Barangay Filter Dropdown - SUPERADMIN ONLY */}
           {currentRole === 'SUPERADMIN' && (
-            <div className="relative shrink-0">
+            <div className="relative min-w-0 col-span-3 sm:flex-1">
               <select
                 value={barangayFilter}
+                aria-label="Filter applicants by barangay"
                 onChange={(e) => setBarangayFilter(e.target.value)}
                 className="appearance-none bg-[#F0F0EC] hover:bg-[#EBEBE6] text-zinc-800 text-xs font-bold py-2 pl-3.5 pr-8 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FFB380]/40 border-0 transition-colors"
                 title="Filter residents by Barangay"
@@ -219,9 +220,10 @@ export const VerificationQueue: React.FC = () => {
           )}
 
           {/* Role Filter Dropdown */}
-          <div className="relative shrink-0">
+          <div className="relative min-w-0 sm:flex-1">
             <select
               value={roleFilter}
+              aria-label="Filter applicants by role"
               onChange={(e) => setRoleFilter(e.target.value as any)}
               className="appearance-none bg-[#F0F0EC] hover:bg-[#EBEBE6] text-zinc-800 text-xs font-bold py-2 pl-3.5 pr-8 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FFB380]/40 border-0 transition-colors"
             >
@@ -233,9 +235,10 @@ export const VerificationQueue: React.FC = () => {
           </div>
 
           {/* Sort Order Dropdown */}
-          <div className="relative shrink-0">
+          <div className="relative min-w-0 sm:flex-1">
             <select
               value={sortOrder}
+              aria-label="Sort applicants"
               onChange={(e) => setSortOrder(e.target.value as any)}
               className="appearance-none bg-[#F0F0EC] hover:bg-[#EBEBE6] text-zinc-800 text-xs font-bold py-2 pl-3.5 pr-8 rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FFB380]/40 border-0 transition-colors"
             >
@@ -250,7 +253,7 @@ export const VerificationQueue: React.FC = () => {
             type="button"
             onClick={() => refreshVerifications()}
             title="Sync with Backend"
-            className="w-[34px] h-[34px] rounded-full bg-[#F0F0EC] text-zinc-700 hover:bg-[#E5E5E0] hover:text-zinc-900 transition-all flex items-center justify-center shrink-0 cursor-pointer border-0 active:scale-95"
+            className="w-10 h-10 rounded-full bg-[#F0F0EC] text-zinc-700 hover:bg-[#E5E5E0] hover:text-zinc-900 transition-all flex items-center justify-center shrink-0 cursor-pointer border-0 active:scale-95"
             aria-label="Refresh Queue"
           >
             <RotateCw className={`w-3.5 h-3.5 ${isLoadingVerifications ? 'animate-spin' : ''}`} />
@@ -259,7 +262,7 @@ export const VerificationQueue: React.FC = () => {
       </div>
 
       {/* Status Filter Tabs - Unified Pill Badges */}
-      <div className="flex items-center gap-2 pb-4 overflow-x-auto">
+      <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 pb-4">
         {[
           { id: 'PENDING', label: 'Pending', icon: Clock, count: pendingCount },
           { id: 'VERIFIED', label: 'Verified', icon: CheckCircle, count: verifiedCount },
@@ -273,18 +276,19 @@ export const VerificationQueue: React.FC = () => {
             <button
               key={tab.id}
               type="button"
+              aria-pressed={isActive}
               onClick={() => setStatusFilter(tab.id as any)}
-              className={`px-4 py-2 rounded-full text-xs font-bold font-display transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+              className={`min-w-0 min-h-10 px-1.5 sm:px-4 py-2 rounded-full text-[11px] sm:text-xs font-bold font-display transition-all flex justify-center items-center gap-1 sm:gap-2 cursor-pointer ${tab.id === 'NO_DOCUMENTS' ? 'col-span-2' : ''} ${
                 isActive
                   ? 'bg-[#0D0D11] text-white'
                   : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900'
               }`}
             >
               {Icon && (
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#FFB380]' : 'text-zinc-400'}`} />
+                <Icon className={`hidden sm:block w-3.5 h-3.5 shrink-0 ${isActive ? 'text-[#FFB380]' : 'text-zinc-400'}`} />
               )}
               <span>{tab.label}</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+              <span className={`text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-black ${
                 isActive ? 'bg-[#FFB380] text-white' : 'bg-white text-zinc-600'
               }`}>
                 {tab.count}
@@ -326,7 +330,7 @@ export const VerificationQueue: React.FC = () => {
         </div>
       ) : (
         <div className="overflow-x-auto mt-2">
-          <table className="w-full text-left border-collapse min-w-[500px]">
+          <table className="verification-applicants w-full text-left border-collapse min-w-[500px]">
             <thead>
               <tr className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 font-display">
                 <th className="py-2.5 px-2.5">User & Role</th>
@@ -360,7 +364,7 @@ export const VerificationQueue: React.FC = () => {
                     aria-label={`${item.name}, ${applicant.documents.length} documents. Open applicant review`}
                     onClick={reviewApplicant}
                     onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); reviewApplicant(); } }}
-                    className={`cursor-pointer transition-colors ${
+                    className={`verification-applicant-row cursor-pointer transition-colors ${
                       isSelected
                         ? 'bg-zinc-100 text-zinc-950'
                         : 'hover:bg-zinc-50/80 text-zinc-700'
@@ -391,11 +395,11 @@ export const VerificationQueue: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <div className="font-bold text-xs text-[#0D0D11] leading-tight">
                             {item.name}
                           </div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1">
                             <span className="text-[10px] text-zinc-600 font-bold">
                               {item.barangay ? (item.barangay.toLowerCase().startsWith('brgy') ? item.barangay : `Brgy. ${item.barangay}`) : 'Brgy. Unassigned'}
                             </span>
@@ -414,7 +418,7 @@ export const VerificationQueue: React.FC = () => {
                     </td>
 
                     {/* Document Type (Consolidated Package or Single Doc or Unsubmitted) */}
-                    <td className="py-2.5 px-2.5 whitespace-nowrap">
+                    <td data-label="Documents" className="py-2.5 px-2.5 whitespace-nowrap">
                       {isUnsubmitted ? (
                         <div className="flex items-center gap-1.5 text-zinc-400">
                           <FileQuestion className="w-3.5 h-3.5 text-amber-500 shrink-0" />
@@ -433,17 +437,17 @@ export const VerificationQueue: React.FC = () => {
                     </td>
 
                     {/* Submitted Date */}
-                    <td className="py-2.5 px-2.5 text-xs font-medium text-zinc-400 whitespace-nowrap" title={applicant.submittedDate}>
+                    <td data-label="Submitted" className="py-2.5 px-2.5 text-xs font-medium text-zinc-400 whitespace-nowrap" title={applicant.submittedDate}>
                       {isUnsubmitted ? '—' : applicant.submittedDate.split(' ').slice(0, 3).join(' ')}
                     </td>
 
                     {/* Status Pill (Minimal with dot indicator) */}
-                    <td className="py-2.5 px-2.5 text-right rounded-r-2xl whitespace-nowrap">
+                    <td data-label="Status" className="py-2.5 px-2.5 text-right rounded-r-2xl whitespace-nowrap">
                       <VerificationStatusBadge status={applicant.status} />
                     </td>
                   </tr>
                   {isExpanded && (
-                    <tr>
+                    <tr className="verification-document-details">
                       <td colSpan={4} className="px-2.5 pb-4 pt-2">
                         <div id={`applicant-documents-${applicant.id}`} aria-label={`Documents for ${item.name}`} className="rounded-2xl bg-zinc-50 p-3 space-y-2">
                           {isUnsubmitted ? <p className="p-2 text-xs text-zinc-500">No documents submitted yet.</p> : applicant.documents.map(document => (
@@ -485,7 +489,7 @@ export const VerificationQueue: React.FC = () => {
           </div>
 
           {/* Right: Pagination Controls */}
-          <div className="flex items-center gap-1.5 select-none">
+          <div className="verification-pagination flex flex-wrap justify-center items-center gap-1.5 select-none">
             {/* Previous Page */}
             <button
               type="button"

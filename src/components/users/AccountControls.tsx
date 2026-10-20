@@ -82,10 +82,10 @@ export function AccountControls({ userId, name, onSaved, disabled = false }: Pro
     } finally { setBusy(false); }
   };
   return <>
-    <button ref={trigger} type="button" disabled={disabled} aria-label={`Manage access for ${name}`} className={subtle} onClick={() => setOpen(true)} title={`Manage access for ${name}`}>Manage access</button>
+    <button ref={trigger} type="button" disabled={disabled} aria-label={`Manage access for ${name}`} className="min-h-10 whitespace-nowrap rounded-full bg-zinc-100 px-3 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold hover:bg-zinc-200 disabled:opacity-50" onClick={() => setOpen(true)} title={`Manage access for ${name}`}>Manage access</button>
     {open && <dialog ref={dialog} aria-labelledby="access-title" onCancel={event => { event.preventDefault(); close(); }}
-      className="m-auto w-[calc(100%_-_2rem)] max-w-md overflow-hidden rounded-3xl bg-white p-0 text-left text-zinc-900 shadow-2xl backdrop:bg-black/40">
-      <header className="flex items-start justify-between gap-5 border-b border-zinc-100 px-6 py-5 sm:px-7">
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%_-_2rem)] max-w-md overflow-y-auto overscroll-contain rounded-3xl bg-white p-0 text-left text-zinc-900 shadow-2xl backdrop:bg-black/40">
+      <header className="flex items-start justify-between gap-3 border-b border-zinc-100 px-4 py-4 sm:px-7 sm:py-5">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">Account access</p>
           <h2 id="access-title" className="mt-1 text-xl font-bold">Manage access</h2>
@@ -94,7 +94,7 @@ export function AccountControls({ userId, name, onSaved, disabled = false }: Pro
         </div>
         <button type="button" aria-label="Close access settings" disabled={busy} onClick={close} className="shrink-0 rounded-full bg-zinc-100 p-3 transition-colors hover:bg-zinc-200"><X size={20} /></button>
       </header>
-      <div className="px-6 py-6 sm:px-7">
+      <div className="px-4 py-5 sm:px-7 sm:py-6">
         {!state && !error && <p role="status" className="text-sm text-zinc-500">Loading access settings…</p>}
         {error && <div role="alert" className="space-y-4 text-sm text-red-700"><p>{error}</p>{!state && <button type="button" className={subtle} onClick={() => setRevision(value => value + 1)}>Retry</button>}</div>}
         {state && <form className="space-y-5" onSubmit={event => { event.preventDefault(); void save(); }}>

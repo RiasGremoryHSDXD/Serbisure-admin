@@ -17,6 +17,7 @@ export const ReviewImageViewer: React.FC<Props> = ({ src, label, onStatus }) => 
   const [view, setView] = useState<ImageTransform>(INITIAL_IMAGE_TRANSFORM);
   const [status, setStatus] = useState<ReviewImageStatus>(src ? 'loading' : 'missing');
   const [attempt, setAttempt] = useState(0);
+  const [moveImage, setMoveImage] = useState(false);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ center: { x: number; y: number }; distance: number; view: ImageTransform } | null>(null);
   const shown = constrainImage(view, frame, image);
@@ -68,6 +69,15 @@ export const ReviewImageViewer: React.FC<Props> = ({ src, label, onStatus }) => 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     captureGesture();
   };
+  const setTouchMovement = (enabled: boolean) => {
+    const element = frameRef.current;
+    for (const id of pointers.current.keys()) {
+      if (element?.hasPointerCapture(id)) element.releasePointerCapture(id);
+    }
+    pointers.current.clear(); gesture.current = null;
+    setMoveImage(enabled);
+  };
+  const resetView = () => { setView(INITIAL_IMAGE_TRANSFORM); setTouchMovement(false); };
   const change = (changes: Partial<ImageTransform>) => setView(current => constrainImage({ ...current, ...changes }, frame, image));
   const fitted = fitImage(frame, image);
   return (
@@ -76,22 +86,31 @@ export const ReviewImageViewer: React.FC<Props> = ({ src, label, onStatus }) => 
         <h3 className="text-sm font-semibold text-zinc-900">{label}</h3>
         <div className="flex items-center gap-1">
           <button type="button" disabled={!ready || shown.zoom <= MIN_IMAGE_ZOOM} onClick={() => change({ zoom: shown.zoom / 1.25 })} aria-label={`Zoom out ${label}`} className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30"><ZoomOut className="h-4 w-4" /></button>
-          <button type="button" disabled={!ready} onClick={() => setView(INITIAL_IMAGE_TRANSFORM)} aria-label={`Reset ${label} view`} title="Reset zoom, rotation and position" className="min-w-14 rounded-lg px-2 py-2 text-xs tabular-nums text-zinc-600 hover:bg-zinc-100 disabled:opacity-30">{Math.round(shown.zoom * 100)}%</button>
+          <button type="button" disabled={!ready} onClick={resetView} aria-label={`Reset ${label} view`} title="Reset zoom, rotation and position" className="min-w-14 rounded-lg px-2 py-2 text-xs tabular-nums text-zinc-600 hover:bg-zinc-100 disabled:opacity-30">{Math.round(shown.zoom * 100)}%</button>
           <button type="button" disabled={!ready || shown.zoom >= MAX_IMAGE_ZOOM} onClick={() => change({ zoom: shown.zoom * 1.25 })} aria-label={`Zoom in ${label}`} className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30"><ZoomIn className="h-4 w-4" /></button>
           <button type="button" disabled={!ready} onClick={() => change({ rotation: shown.rotation + 90 })} aria-label={`Rotate ${label}`} className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 disabled:opacity-30"><RotateCw className="h-4 w-4" /></button>
         </div>
+      </div>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <button type="button" disabled={!ready} aria-label={`Move ${label}`} aria-pressed={moveImage}
+          onClick={() => setTouchMovement(!moveImage)}
+          className={`min-h-10 rounded-full px-3 py-2 text-xs font-semibold disabled:opacity-30 ${moveImage ? 'bg-orange-100 text-orange-900' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}>
+          {moveImage ? 'Scroll page' : 'Move image'}
+        </button>
+        <span className="text-[11px] text-zinc-500">{moveImage ? 'Drag or pinch the image. Tap Scroll page when done.' : 'Swipe over the image to scroll down.'}</span>
       </div>
       <div
         ref={frameRef}
         tabIndex={ready ? 0 : -1}
         role="group"
-        aria-label={`${label}: use zoom controls, drag to move, or arrow keys to pan`}
+        aria-label={`${label}: ${moveImage ? 'drag or pinch to move and zoom' : 'swipe to scroll; enable Move image for touch dragging and pinch zoom'}; use zoom controls or arrow keys to pan`}
         className={`relative h-[clamp(220px,45vh,620px)] overflow-hidden rounded-xl bg-zinc-100 outline-none focus-visible:ring-2 focus-visible:ring-orange-300 ${ready ? 'cursor-grab active:cursor-grabbing' : ''}`}
-        style={{ touchAction: ready ? 'none' : 'auto' }}
-        onDoubleClick={() => setView(INITIAL_IMAGE_TRANSFORM)}
+        style={{ touchAction: ready && moveImage ? 'none' : 'pan-y pinch-zoom' }}
+        onDoubleClick={resetView}
         onPointerDown={event => {
           if (!ready || (event.pointerType === 'mouse' && event.button !== 0) || pointers.current.size >= 2) return;
-          event.preventDefault(); event.currentTarget.focus();
+          if (event.pointerType !== 'mouse' && !moveImage) return;
+          event.preventDefault(); event.currentTarget.focus({ preventScroll: true });
           event.currentTarget.setPointerCapture(event.pointerId);
           pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); captureGesture();
         }}
@@ -116,7 +135,7 @@ export const ReviewImageViewer: React.FC<Props> = ({ src, label, onStatus }) => 
             ArrowUp: { y: shown.y + 40 }, ArrowDown: { y: shown.y - 40 },
             '+': { zoom: shown.zoom * 1.25 }, '=': { zoom: shown.zoom * 1.25 }, '-': { zoom: shown.zoom / 1.25 },
           };
-          if (event.key === '0' || event.key === 'Home') { event.preventDefault(); setView(INITIAL_IMAGE_TRANSFORM); }
+          if (event.key === '0' || event.key === 'Home') { event.preventDefault(); resetView(); }
           else if (steps[event.key]) { event.preventDefault(); change(steps[event.key]); }
         }}
       >
@@ -139,7 +158,7 @@ export const ReviewImageViewer: React.FC<Props> = ({ src, label, onStatus }) => 
           {status === 'error' && <button type="button" onClick={() => { setStatus('loading'); setAttempt(value => value + 1); }} className="rounded-full bg-white px-4 py-2 font-semibold text-zinc-700">Try again</button>}
         </div>}
       </div>
-      <p className="mt-2 text-[11px] text-zinc-400">Scroll or pinch to zoom · Drag to move · Double-click to reset</p>
+      <p className="mt-2 text-[11px] text-zinc-400">Use the controls or mouse wheel to zoom · Double-click to reset</p>
     </section>
   );
 };

@@ -137,14 +137,13 @@ export const EmploymentTrendChart: React.FC = () => {
   }, [barangays, userBarangays]);
 
   return (
-    <div className="bg-white rounded-3xl p-5 sm:p-7 min-w-0 flex flex-col justify-start h-full relative shadow-sm border border-zinc-100">
+    <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-7 min-w-0 flex flex-col justify-start h-full relative shadow-sm border border-zinc-100">
       {error && <p role="alert" className="mb-3 text-xs text-amber-800">{error} <button className="underline" onClick={() => setAttempt(value => value + 1)}>Retry</button></p>}
-      {chartData.some(point => point.has_history === false) && <p className="mb-2 text-xs text-zinc-500">Earlier months have no recorded status history. Current month uses live verified-worker counts.</p>}
       {!isLoading && !error && chartData.length === 0 && <p className="mb-3 text-xs text-zinc-500">No employment trend data yet.</p>}
       {/* Minimal Header & Controls */}
       <div className="flex flex-col gap-3 mb-4 min-w-0">
         <div className="flex items-center gap-2.5">
-          <h3 className="text-lg font-black font-display text-[#0D0D11] tracking-tight">
+          <h3 className="text-base sm:text-lg font-black font-display text-[#0D0D11] tracking-tight">
             Employment Trends
           </h3>
           {(isLoading || isLoadingMonthlyTrend) && (
@@ -158,14 +157,14 @@ export const EmploymentTrendChart: React.FC = () => {
         {/* Legend & Barangay Filter */}
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 min-w-0">
           {/* Barangay Selector */}
-          <div className="relative min-w-0 max-w-full">
+          <div className="relative w-full sm:w-auto min-w-0 max-w-full">
             <select
               value={activeBarangay}
               onChange={(e) => { setActiveBarangay(e.target.value); setSelectedBarangay(e.target.value); }}
               disabled={currentUser?.role === 'ADMIN'}
               aria-label="Filter employment trends by barangay"
               title={activeBarangay === 'All Barangays' ? 'All CDO Barangays' : `Brgy. ${activeBarangay}`}
-              className="appearance-none max-w-full truncate bg-[#F4F4F0] hover:bg-[#EAEAE5] text-zinc-800 text-xs font-bold font-display py-1.5 pl-3 pr-7 rounded-full border border-zinc-200/60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-colors"
+              className="appearance-none min-h-10 w-full sm:w-auto max-w-full truncate bg-[#F4F4F0] hover:bg-[#EAEAE5] text-zinc-800 text-xs font-bold font-display py-2 pl-3 pr-7 rounded-xl sm:rounded-full border border-zinc-200/60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-colors"
             >
               {barangayOptions.map((bgy) => (
                 <option key={bgy} value={bgy}>
@@ -188,11 +187,28 @@ export const EmploymentTrendChart: React.FC = () => {
           </div>
         </div>
       </div>
-
-
-
+      {chartData.some(point => point.has_history === false) && <p className="mb-3 rounded-xl bg-zinc-50 p-3 text-[11px] sm:text-xs leading-5 text-zinc-500">Earlier months have no recorded status history. Current month uses live verified-worker counts.</p>}
+      {/* Keep phone labels at their actual font size instead of scaling down the SVG. */}
+      <div className="sm:hidden" role="img" aria-label="Monthly occupied and available verified workers">
+        <div className="relative flex h-48 gap-2 border-b border-zinc-200 px-1 pt-6">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-6 bottom-0 flex flex-col justify-between">
+            {[0, 1, 2, 3].map(line => <div key={line} className="border-t border-dashed border-zinc-100" />)}
+          </div>
+          {DISPLAY_DATA.map(point => <div key={`${point.month}-${point.year}`} className="relative flex min-w-0 flex-1 items-end justify-center gap-1.5">
+            {point.has_history === false ? <span className="self-center text-xs text-zinc-400" aria-label={`${point.month}: no history`}>—</span> : <>
+              <div className="relative w-2.5 rounded-t bg-[#F97316]" style={{ height: `${((point.employed ?? 0) / maxVal) * 100}%` }}>
+                <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-orange-600">{point.employed}</span>
+              </div>
+              <div className="relative w-2.5 rounded-t bg-[#0D0D11]" style={{ height: `${((point.available ?? 0) / maxVal) * 100}%` }}>
+                <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-zinc-700">{point.available}</span>
+              </div>
+            </>}
+          </div>)}
+        </div>
+        <div className="mt-2 flex gap-2 px-1">{DISPLAY_DATA.map((point, index) => <span key={`${point.month}-${point.year}`} className={`min-w-0 flex-1 text-center text-[11px] ${index === DISPLAY_DATA.length - 1 ? 'font-bold text-orange-600' : 'text-zinc-500'}`}>{point.month}</span>)}</div>
+      </div>
       {/* SVG Bar Graph */}
-      <div className="relative w-full min-w-0 min-h-[190px] overflow-hidden mt-1">
+      <div className="hidden sm:block relative w-full min-w-0 min-h-[190px] overflow-hidden mt-1">
         <svg
           viewBox={`0 0 ${width} ${height}`}
           className="w-full h-auto min-h-[190px] overflow-visible select-none"

@@ -29,20 +29,21 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
     : 'SUPERADMIN';
 
   return (
-    <header className="h-16 sm:h-20 bg-white/80 backdrop-blur-md px-4 sm:px-6 md:px-8 flex items-center justify-between sticky top-0 z-30">
+    <header className="h-16 sm:h-20 shrink-0 border-b border-zinc-100 bg-white/95 backdrop-blur-md px-3 sm:px-6 md:px-8 flex items-center justify-between gap-2 sticky top-0 z-30">
       {/* Page Title & Mobile Hamburger Button */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <button
           type="button"
           onClick={onToggleMobileMenu}
-          className="p-1.5 sm:p-2 -ml-1 rounded-xl text-zinc-700 hover:text-zinc-950 hover:bg-zinc-100 transition-colors md:hidden cursor-pointer shrink-0"
+          className="h-10 w-10 flex items-center justify-center -ml-1 rounded-xl text-zinc-700 hover:text-zinc-950 hover:bg-zinc-100 transition-colors lg:hidden cursor-pointer shrink-0"
           title="Open menu"
           aria-label="Open menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <span className="text-sm sm:text-base md:text-lg font-black font-display text-[#0D0D11] tracking-tight capitalize truncate">
+        <span className="sm:hidden font-display text-base font-black text-[#0D0D11] tracking-tight">Serbi<span className="text-[#FFB380]">Sure.</span></span>
+        <span className="hidden sm:block text-base md:text-lg font-black font-display text-[#0D0D11] tracking-tight capitalize truncate">
           {activeNav === 'dashboard' ? 'Kasambahay Workforce' : activeNav === 'account-access' ? 'Account Access' : activeNav}
         </span>
       </div>
@@ -55,7 +56,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
           {currentUser?.role === 'SUPERADMIN' ? (
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 sm:py-2 bg-[#0D0D11] hover:bg-black text-white rounded-full text-[10px] sm:text-xs font-extrabold tracking-tight transition-all cursor-pointer"
+              className="min-h-10 flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-5 py-2 bg-[#0D0D11] hover:bg-black text-white rounded-full text-[10px] sm:text-xs font-extrabold tracking-tight transition-all cursor-pointer"
               title="Click to switch perspective / jurisdiction"
             >
               {selectedBarangay === 'UNASSIGNED' ? (
@@ -63,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
               ) : (
                 <Shield className="w-3 sm:w-3.5 h-3 sm:h-3.5 text-[#FFB380] shrink-0" />
               )}
-              <span className="font-display font-black tracking-wider uppercase text-[10px] sm:text-[11px] truncate max-w-[110px] sm:max-w-none">
+              <span className="sr-only sm:not-sr-only font-display font-black tracking-wider uppercase text-[11px] sm:truncate sm:max-w-none">
                 {pillLabel}
               </span>
               <ChevronDown className={`w-3 sm:w-3.5 h-3 sm:h-3.5 text-zinc-400 transition-transform shrink-0 ${dropdownOpen ? 'rotate-180' : ''}`} />
@@ -71,11 +72,11 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
           ) : (
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-[#F0F0EC] hover:bg-[#EAEAE5] text-zinc-800 rounded-full text-[10px] sm:text-xs font-bold tracking-tight transition-all cursor-pointer"
+              className="min-h-10 flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 bg-[#F0F0EC] hover:bg-[#EAEAE5] text-zinc-800 rounded-full text-[10px] sm:text-xs font-bold tracking-tight transition-all cursor-pointer"
               title={`Authorized LGU Officer of Brgy. ${currentUser?.barangay || selectedBarangay}`}
             >
               <Building2 className="w-3 sm:w-3.5 h-3 sm:h-3.5 text-[#FFB380] shrink-0" />
-              <span className="font-display font-black tracking-wider uppercase text-[10px] sm:text-[11px] truncate max-w-[110px] sm:max-w-none">
+              <span className="sr-only sm:not-sr-only font-display font-black tracking-wider uppercase text-[11px] sm:truncate sm:max-w-none">
                 Brgy. {currentUser?.barangay || selectedBarangay}
               </span>
               <ChevronDown className={`w-3 sm:w-3.5 h-3 sm:h-3.5 text-zinc-400 transition-transform shrink-0 ${dropdownOpen ? 'rotate-180' : ''}`} />
@@ -84,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
 
           {/* Role Switching Dropdown Modal */}
           {dropdownOpen && (
-            <div className="absolute right-0 mt-3 w-72 max-w-[calc(100vw-1.5rem)] bg-white rounded-3xl p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ring-1 ring-black/5 shadow-xl">
+            <div className="fixed right-3 top-16 max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain sm:absolute sm:right-0 sm:top-full sm:mt-3 w-72 max-w-[calc(100vw-1.5rem)] bg-white rounded-2xl sm:rounded-3xl p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 ring-1 ring-black/5 shadow-xl">
               <div className="px-3 py-2.5 mb-1 bg-[#F6F5F2] rounded-2xl">
                 <div className="text-xs font-black font-display text-zinc-900">{currentUser?.name || 'Administrator'}</div>
                 <div className="text-[11px] text-zinc-500 font-medium">
@@ -186,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
           <img
             src={currentUser?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"}
             alt="Admin Profile"
-            className="w-10 h-10 rounded-full object-cover transition-transform active:scale-95"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover transition-transform active:scale-95"
           />
         </div>
       </div>

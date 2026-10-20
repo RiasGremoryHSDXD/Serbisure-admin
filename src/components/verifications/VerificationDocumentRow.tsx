@@ -31,7 +31,7 @@ export const VerificationDocumentRow: React.FC<Props> = ({ document, selected, o
     } finally { setBusy(false); }
   };
   return (
-    <div className={`rounded-xl border p-3 ${selected ? 'border-orange-200 bg-orange-50/40' : 'border-zinc-200/70 bg-white'}`}>
+    <div className={`verification-document-card rounded-xl border p-3 ${selected ? 'border-orange-200 bg-orange-50/40' : 'border-zinc-200/70 bg-white'}`}>
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={onReview} aria-label={`Review ${document.documentType}`} className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200">
           <span className="flex h-12 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100">
@@ -43,7 +43,7 @@ export const VerificationDocumentRow: React.FC<Props> = ({ document, selected, o
           </span>
         </button>
         <VerificationStatusBadge status={document.status} />
-        <div className="flex flex-wrap items-center gap-2" aria-busy={busy}>
+        <div className="verification-document-actions flex flex-wrap items-center gap-2" aria-busy={busy}>
           <button type="button" onClick={onReview} className="px-2 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-950 cursor-pointer">Review</button>
           {document.status === 'VERIFIED' ? (
             <button type="button" disabled={busy} onClick={() => void decide('reset')} className="rounded-full bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-700 disabled:opacity-50 cursor-pointer">Re-open</button>

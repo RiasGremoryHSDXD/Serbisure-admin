@@ -127,7 +127,7 @@ export const IdentityComparisonContent: React.FC<IdentityComparisonModalProps> =
           <button type="button" disabled={busy} onClick={close} aria-label="Close applicant review" title="Close (Esc)" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200 disabled:opacity-40"><X className="h-5 w-5" /></button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-zinc-500">Compare the submitted photo with the face shown on the document.</p>
             {availableDocuments.length > 1 && onDocumentChange && <select

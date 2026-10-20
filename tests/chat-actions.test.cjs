@@ -130,6 +130,26 @@ test('text replies send mobile-compatible quotes, prevent duplicate sends and sh
   assert.doesNotMatch(chat.text(), /> \[Sakura/);
 });
 
+test('a phone swipe across nested message text opens the actual reply composer with the correct quote', async t => {
+  const chat = screen(t); await chat.load();
+  const surface = chat.byLabel('Message options', chat.row('incoming'));
+  const captured = new Set();
+  const element = { setPointerCapture: id => captured.add(id), hasPointerCapture: id => captured.has(id), releasePointerCapture: id => captured.delete(id) };
+  const text = {};
+  const event = extra => ({ pointerType: 'touch', pointerId: 1, isPrimary: true, currentTarget: element, target: text, clientX: 100, clientY: 200, ...extra });
+  act(() => surface.props.onPointerDown(event()));
+  act(() => surface.props.onPointerMove(event({ clientX: 125, clientY: 204 })));
+  act(() => surface.props.onLostPointerCapture(event()));
+  act(() => surface.props.onPointerMove(event({ clientX: 150, clientY: 210 })));
+  act(() => surface.props.onPointerUp(event({ clientX: 165, clientY: 212 })));
+  assert.match(chat.text(), /Replying to Sakura Sasuke/);
+  assert.equal(chat.view.root.findAllByProps({ 'aria-label': 'Reply preview' }).length, 1);
+  chat.type('Swipe answer'); chat.send();
+  assert.equal(chat.calls.send.length, 1);
+  assert.equal(parseChatReply(chat.calls.send[0].args[1]).reply.messageId, 'incoming');
+  assert.equal(captured.size, 0);
+});
+
 test('replying to an own message uses the simple self label without changing the stored author', async t => {
   const chat = screen(t); await chat.load();
   chat.click(chat.byLabel('Reply to message', chat.row('outgoing')));
@@ -170,6 +190,7 @@ test('failed sends keep the reply and draft; cancelling or changing conversation
   const chat = screen(t); await chat.load(); chat.click(chat.byLabel('Reply to message', chat.row('incoming')));
   chat.type('Retry this'); chat.send(); await chat.settle(chat.calls.send[0], 'Offline', true);
   assert.equal(chat.view.root.findByType('textarea').props.value, 'Retry this');
+  assert.equal(chat.byLabel('Dismiss message notice').type, 'button', 'send errors are visible beside the composer, not only above the message history');
   assert.equal(chat.view.root.findAllByProps({ 'aria-label': 'Reply preview' }).length, 1);
   chat.click(chat.byLabel('Cancel reply'));
   assert.equal(chat.view.root.findAllByProps({ 'aria-label': 'Reply preview' }).length, 0);
@@ -185,6 +206,20 @@ test('an oversized reply keeps the draft and quote without sending a request', a
   assert.equal(chat.view.root.findByType('textarea').props.value.length, 501);
   assert.equal(chat.view.root.findAllByProps({ 'aria-label': 'Reply preview' }).length, 1);
   assert.match(chat.text(), /Message is too long/);
+});
+
+test('failed image sends keep the selected file and caption, show a composer notice, and can be retried', async t => {
+  const chat = screen(t); await chat.load();
+  chat.type('Image caption');
+  act(() => chat.view.root.findByProps({ type: 'file' }).props.onChange({ target: { files: [new Blob(['photo'], { type: 'image/png' })], value: '' } }));
+  chat.send(); await chat.settle(chat.calls.image[0], 'Offline', true);
+  assert.equal(chat.view.root.findByType('textarea').props.value, 'Image caption');
+  assert.equal(chat.view.root.findAllByProps({ alt: 'Preview' }).length, 1);
+  assert.equal(chat.byLabel('Dismiss message notice').type, 'button');
+  chat.send(); assert.equal(chat.calls.image.length, 2);
+  await chat.settle(chat.calls.image[1], message('photo-saved', 'Image caption', { message_type: 'image', image_url: 'https://example.test/photo.png', sender_id: 'admin', receiver_id: 'resident' }));
+  assert.equal(chat.view.root.findByType('textarea').props.value, '');
+  assert.equal(chat.view.root.findAllByProps({ alt: 'Preview' }).length, 0);
 });
 
 test('photo replies preserve the image preview and can send another image without a caption', async t => {
