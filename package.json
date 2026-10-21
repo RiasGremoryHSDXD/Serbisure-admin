@@ -9,9 +9,10 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test:chat": "node --test tests/chat-inbox.test.cjs tests/chat-typing.test.cjs tests/chat-presence.test.cjs tests/chat-actions.test.cjs tests/chat-gestures.test.cjs tests/chat-viewport.test.cjs tests/chat-request-id.test.cjs",
+    "test:chat": "node --test tests/chat-inbox.test.cjs tests/chat-typing.test.cjs tests/chat-presence.test.cjs tests/chat-actions.test.cjs tests/chat-gestures.test.cjs tests/chat-viewport.test.cjs tests/chat-request-id.test.cjs tests/chat-language.test.cjs",
     "test:dashboard": "node --test tests/dashboard-data.test.cjs tests/dashboard-layout.test.cjs tests/api-routing.test.cjs",
-    "test:verifications": "node --test tests/verification-applicants.test.cjs tests/image-viewport.test.cjs"
+    "test:verifications": "node --test tests/verification-applicants.test.cjs tests/image-viewport.test.cjs",
+    "test:language": "node --test tests/chat-language.test.cjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

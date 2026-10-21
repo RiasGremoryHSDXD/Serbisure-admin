@@ -222,7 +222,8 @@ export async function fetchChatThread(partnerId: string): Promise<ChatMessage[]>
  */
 export async function sendChatMessage(
   receiverId: string,
-  messagePayload: string
+  messagePayload: string,
+  languageWarningAcknowledged = false,
 ): Promise<ChatMessage> {
   const idempotencyKey = createRequestId();
   const res = await fetchApi<{ message: string; data: ChatMessage; language_warning?: string | null }>(
@@ -230,7 +231,7 @@ export async function sendChatMessage(
     {
       method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey },
-      body: JSON.stringify({ receiver_id: receiverId, message_payload: messagePayload }),
+      body: JSON.stringify({ receiver_id: receiverId, message_payload: messagePayload, ...(languageWarningAcknowledged ? { language_warning_acknowledged: true } : {}) }),
     }
   );
   return { ...res.data, language_warning: res.language_warning };
@@ -246,10 +247,12 @@ export async function sendChatMessage(
 export async function sendChatImageMessage(
   receiverId: string,
   imageFile: File,
-  caption?: string
+  caption?: string,
+  languageWarningAcknowledged = false,
 ): Promise<ChatMessage> {
   const idempotencyKey = createRequestId();
   const formData = new FormData();
+  formData.append('language_warning_acknowledged', String(languageWarningAcknowledged));
   formData.append('receiver_id', receiverId);
   formData.append('image', imageFile);
   if (caption && caption.trim()) {

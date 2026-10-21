@@ -42,7 +42,7 @@ test('API helpers send quoted text and image captions unchanged and remove throu
   assert.equal(calls[2][1].method, 'DELETE'); assert.equal(calls[2][1].maxRetries, 0);
 });
 
-function screen(t, history = [message('incoming'), message('outgoing', 'My message', { sender_id: 'admin', receiver_id: 'resident' })]) {
+function screen(t, history = [message('incoming'), message('outgoing', 'My message', { sender_id: 'admin', receiver_id: 'resident' })], role = 'SUPERADMIN') {
   const globals = { window: global.window, document: global.document, navigator: Object.getOwnPropertyDescriptor(global, 'navigator') };
   const listeners = new Map();
   const add = (name, callback) => { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(callback); };
@@ -56,9 +56,9 @@ function screen(t, history = [message('incoming'), message('outgoing', 'My messa
     if (copyFails) throw new Error('Unavailable'); calls.copied.push(text);
   } } } });
   const resident = { id: 'resident', name: 'Sakura Sasuke', role: 'HOMEOWNER', avatar: '', email: 'person@example.test',
-    barangay: '', address: '', city: '', joinedDate: '2026-10-18', socialLinks: [], contactNumber: '' };
+    barangay: role === 'ADMIN' ? 'Pagatpat' : '', address: '', city: '', joinedDate: '2026-10-18', socialLinks: [], contactNumber: '' };
   const state = { users: [resident, { ...resident, id: 'second', name: 'Second User' }], currentUser: { id: 'admin', name: 'Admin Name', username: 'admin' },
-    currentRole: 'SUPERADMIN', selectedBarangay: 'All Barangays', userBarangays: [], chatInbox: [], requestedChatPartner: null,
+    currentRole: role, selectedBarangay: role === 'ADMIN' ? 'Pagatpat' : 'All Barangays', userBarangays: [], chatInbox: [], requestedChatPartner: null,
     refreshChatInbox() { calls.refresh++; }, refreshUsers() {} };
   let event;
   const request = (kind, args) => { const pending = { ...deferred(), args }; calls[kind].push(pending); return pending.promise; };
@@ -99,6 +99,93 @@ function screen(t, history = [message('incoming'), message('outgoing', 'My messa
     text: () => JSON.stringify(view.toJSON()),
   };
 }
+
+for (const role of ['SUPERADMIN', 'ADMIN']) {
+  for (const channel of ['text', 'image']) {
+    test(`${role} ${channel}: keep Review your message but suppress the extra suspension Notice after sending`, async t => {
+      const chat = screen(t, undefined, role); await chat.load(); chat.type('kill');
+      if (channel === 'image') {
+        act(() => chat.view.root.findByProps({ type: 'file' }).props.onChange({ target: { files: [new Blob(['photo'], { type: 'image/png' })], value: '' } }));
+      }
+      chat.send();
+      assert.match(chat.text(), /Review your message/);
+      assert.equal(chat.calls.send.length + chat.calls.image.length, 0);
+      chat.click(chat.view.root.findAllByType('button').find(node => node.children.join('') === 'Send Anyway'));
+      const request = channel === 'image' ? chat.calls.image[0] : chat.calls.send[0];
+      const notice = 'Inappropriate or threatening language was detected. Your Barangay or SerbiSure Support may suspend messaging.';
+      await chat.settle(request, message('sent-flagged', 'kill', {
+        sender_id: 'admin', receiver_id: 'resident', language_warning: notice,
+        ...(channel === 'image' ? { message_type: 'image', image_url: 'https://example.test/photo.png' } : {}),
+      }));
+      assert.ok(chat.row('sent-flagged'));
+      assert.doesNotMatch(chat.text(), /Inappropriate or threatening language|may suspend messaging|Notice:/);
+      assert.equal(chat.view.root.findAllByProps({ 'aria-label': 'Dismiss language notice' }).length, 0);
+    });
+  }
+}
+
+test('flagged drafts stay unsent until Send Anyway; Close preserves the draft and consent sends only once', async t => {
+  const chat = screen(t); await chat.load();
+  const button = label => chat.view.root.findAllByType('button').find(node => node.children.join('') === label);
+  chat.type('gago ka'); chat.send();
+  assert.equal(chat.calls.send.length, 0);
+  assert.match(chat.text(), /This message may contain offensive content/);
+  chat.click(button('Close'));
+  assert.equal(chat.view.root.findByType('textarea').props.value, 'gago ka');
+  chat.send();
+  const confirm = button('Send Anyway').props.onClick; act(() => { confirm(); confirm(); });
+  assert.equal(chat.calls.send.length, 1);
+  assert.deepEqual(chat.calls.send[0].args, ['resident', 'gago ka', true]);
+  await chat.settle(chat.calls.send[0], message('saved-original', 'gago ka', { sender_id: 'admin', receiver_id: 'resident' }));
+  assert.match(chat.text(), /gago ka/);
+});
+
+test('flagged captions preserve the selected image and reply until explicit confirmation', async t => {
+  const chat = screen(t); await chat.load();
+  chat.click(chat.byLabel('Reply to message', chat.row('incoming')));
+  chat.type('f*ck');
+  act(() => chat.view.root.findByProps({ type: 'file' }).props.onChange({ target: { files: [new Blob(['photo'], { type: 'image/png' })], value: '' } }));
+  chat.send();
+  assert.equal(chat.calls.image.length, 0);
+  chat.click(chat.view.root.findAllByType('button').find(node => node.children.join('') === 'Close'));
+  assert.equal(chat.view.root.findAllByProps({ alt: 'Preview' }).length, 1);
+  assert.equal(chat.view.root.findAllByProps({ 'aria-label': 'Reply preview' }).length, 1);
+  chat.send(); chat.click(chat.view.root.findAllByType('button').find(node => node.children.join('') === 'Send Anyway'));
+  assert.equal(chat.calls.image.length, 1);
+  assert.equal(chat.calls.image[0].args[3], true);
+  assert.equal(parseChatReply(chat.calls.image[0].args[2]).text, 'f*ck');
+});
+
+test('recipient text, quotes, photos and actions stay hidden until Show Message; Close leaves them hidden', async t => {
+  const original = '> [Admin||quote]: gago\n\nPrivate original';
+  const chat = screen(t, [message('sensitive', original, { message_type: 'image', image_url: 'https://example.test/photo.png', is_sensitive: true })]);
+  await chat.load();
+  const button = label => chat.view.root.findAllByType('button').find(node => node.children.join('') === label);
+  assert.doesNotMatch(chat.text(), /Private original|gago|https:\/\/example.test\/photo.png/);
+  assert.equal(chat.row('sensitive').findAllByProps({ 'aria-label': 'Message actions' }).length, 0);
+  chat.click(chat.byLabel('Open sensitive message'));
+  assert.match(chat.text(), /Would you like to show it/);
+  chat.click(button('Close')); assert.doesNotMatch(chat.text(), /Private original/);
+  chat.click(chat.byLabel('Open sensitive message')); chat.click(button('Show Message'));
+  assert.match(chat.text(), /Private original|gago/);
+  chat.open('second'); chat.open('resident');
+  assert.doesNotMatch(chat.text(), /Private original/);
+});
+
+test('pending warning consent cannot send to a different conversation', async t => {
+  const chat = screen(t); await chat.load(); chat.type('gago'); chat.send();
+  const confirm = chat.view.root.findAllByType('button').find(node => node.children.join('') === 'Send Anyway').props.onClick;
+  chat.open('second'); act(confirm);
+  assert.equal(chat.calls.send.length, 0);
+});
+
+test('a newer server dictionary can request consent without losing the original draft', async t => {
+  const chat = screen(t); await chat.load(); chat.type('Newly flagged wording'); chat.send();
+  await act(async () => chat.calls.send[0].reject(Object.assign(new Error('Review message'), { status: 409, data: { code: 'offensive_language_warning' } })));
+  assert.equal(chat.view.root.findByType('textarea').props.value, 'Newly flagged wording');
+  chat.click(chat.view.root.findAllByType('button').find(node => node.children.join('') === 'Send Anyway'));
+  assert.deepEqual(chat.calls.send[1].args, ['resident', 'Newly flagged wording', true]);
+});
 
 test('each message shows three compact actions; reactions appear only on demand and toggle using server state', async t => {
   const chat = screen(t); await chat.load();

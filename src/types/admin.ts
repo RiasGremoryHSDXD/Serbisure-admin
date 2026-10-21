@@ -249,6 +249,7 @@ export interface ChatReply {
 }
 
 export interface ChatMessage {
+  is_sensitive?: boolean;
   language_warning?: string | null;
   chat_message_id: string;
   sender_id: string;
