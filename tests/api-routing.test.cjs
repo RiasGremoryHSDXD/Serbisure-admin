@@ -34,6 +34,15 @@ test('hosted targets and production builds keep their explicitly configured back
   assert.equal(client({ DEV: false, VITE_API_URL: 'http://localhost:8000' }, 'http://localhost:3000').API_BASE_URL, 'http://localhost:8000');
 });
 
+test('without a terminal override the admin uses DigitalOcean in development and production', () => {
+  for (const DEV of [true, false]) {
+    const api = client({ DEV }, 'http://localhost:3000');
+    assert.equal(api.API_BASE_URL, 'https://159.89.196.204');
+    assert.equal(api.buildApiUrl('/api/v1/accounts/admin/penalties/users/'),
+      'https://159.89.196.204/api/v1/accounts/admin/penalties/users/');
+  }
+});
+
 test('the Vite API proxy preserves login requests and backend responses', async t => {
   const received = [];
   const backend = http.createServer((req, res) => {

@@ -4,6 +4,7 @@ import {
   CheckCircle2, 
   Users,
   ShieldCheck,
+  Scale,
   Settings, 
   LogOut,
   PanelLeft,
@@ -35,6 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'verifications', label: 'Verifications', icon: CheckCircle2, badge: pendingCount },
     { id: 'users', label: 'Users', icon: Users, badge: unreadChatCount },
     { id: 'account-access', label: 'Account Access', icon: ShieldCheck },
+    { id: 'penalty-points', label: 'Penalty Points', icon: Scale },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 

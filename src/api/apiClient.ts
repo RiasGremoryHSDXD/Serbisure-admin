@@ -115,6 +115,7 @@ export function sanitizeUserFriendlyError(rawMessage: string): string {
 export interface FetchApiOptions extends RequestInit {
   timeoutMs?: number;
   maxRetries?: number;
+  responseType?: 'json' | 'text' | 'blob';
 }
 
 const DEFAULT_TIMEOUT_MS = 25000; // 25 seconds to comfortably accommodate Vercel serverless cold starts
@@ -128,7 +129,7 @@ const DEFAULT_TIMEOUT_MS = 25000; // 25 seconds to comfortably accommodate Verce
  * - 401 session expiration event dispatch
  */
 export async function fetchApi<T>(endpoint: string, options: FetchApiOptions = {}): Promise<T> {
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, maxRetries = 1, ...fetchOptions } = options;
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, maxRetries = 1, responseType = 'json', ...fetchOptions } = options;
   const url = buildApiUrl(endpoint);
 
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('serbisure_admin_token') : null;
@@ -200,7 +201,8 @@ export async function fetchApi<T>(endpoint: string, options: FetchApiOptions = {
         throw Object.assign(new Error(sanitizeUserFriendlyError(message)), { status: response.status, data: errorData });
       }
 
-      return await response.json();
+      if (responseType === 'blob') return await response.blob() as T;
+      return responseType === 'text' ? await response.text() as T : await response.json();
     } catch (err: any) {
       clearTimeout(timer);
 

@@ -44,7 +44,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
 
         <span className="sm:hidden font-display text-base font-black text-[#0D0D11] tracking-tight">Serbi<span className="text-[#FFB380]">Sure.</span></span>
         <span className="hidden sm:block text-base md:text-lg font-black font-display text-[#0D0D11] tracking-tight capitalize truncate">
-          {activeNav === 'dashboard' ? 'Kasambahay Workforce' : activeNav === 'account-access' ? 'Account Access' : activeNav}
+          {activeNav === 'dashboard' ? 'Kasambahay Workforce' : activeNav === 'account-access' ? 'Account Access' : activeNav === 'penalty-points' ? 'Penalty Points' : activeNav}
         </span>
       </div>
 
