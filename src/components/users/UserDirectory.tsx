@@ -32,6 +32,8 @@ import { AccountControls } from './AccountControls';
 import { MessageActions } from '../chat/MessageActions';
 import { QuotedReply } from '../chat/QuotedReply';
 import { RemoveMessageDialog } from '../chat/RemoveMessageDialog';
+import { ChatLanguageDialog, SensitiveMessage } from '../chat/ChatLanguageDialog';
+import { containsOffensiveLanguage } from '../../utils/offensiveLanguage';
 import { getReplyRelationship, isOutgoingChatMessage, makeChatReply, parseChatReply, withChatReply } from '../../data/chatReplies';
 
 function inboxRole(accountType: string): AccountRole {
@@ -221,6 +223,7 @@ export const UserDirectory: React.FC = () => {
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<ChatMessage | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [languageWarning, setLanguageWarning] = useState<{ generation: number; send: () => void } | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const sendThread = useRef({ id: messageThreadUserId, account: currentUser?.id, generation: 0 });
   if (sendThread.current.id !== messageThreadUserId || sendThread.current.account !== currentUser?.id) {
@@ -231,6 +234,7 @@ export const UserDirectory: React.FC = () => {
   useEffect(() => {
     setReplyingTo(null); setActionNotice(null); setPendingActions(new Set());
     setRemoveTarget(null); setRemoveError(null);
+    setLanguageWarning(null);
   }, [messageThreadUserId, currentUser?.id]);
   useEffect(() => () => { sendThread.current.generation++; }, []);
   const restrictedUntil = useMessagingRestriction();
@@ -242,8 +246,6 @@ export const UserDirectory: React.FC = () => {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
-  const [languageNotice, setLanguageNotice] = useState<string | null>(null);
-  useEffect(() => { setLanguageNotice(null); }, [messageThreadUserId]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
@@ -410,10 +412,14 @@ export const UserDirectory: React.FC = () => {
     e.target.value = '';
   };
 
-  const handleSendImage = async () => {
+  const handleSendImage = async (acknowledged = false) => {
     if (!messageThreadUserId || !imageFile || isSendingImage || sendGuard.current) return;
     const captionPayload = withChatReply(chatInput.trim(), replyingTo);
     if (captionPayload.length > 500) { setChatError('Message is too long. Shorten it and try again.'); return; }
+    if (!acknowledged && containsOffensiveLanguage(captionPayload)) {
+      setLanguageWarning({ generation: sendThread.current.generation, send: () => { void handleSendImage(true); } });
+      return;
+    }
     sendGuard.current = true;
     const generation = sendThread.current.generation;
     composerTyping.current?.stop();
@@ -423,10 +429,11 @@ export const UserDirectory: React.FC = () => {
     setChatError(null);
     setActionNotice(null);
     try {
-      const sent = await sendChatImageMessage(messageThreadUserId, fileToSend, captionPayload || undefined);
+      const sent = acknowledged
+        ? await sendChatImageMessage(messageThreadUserId, fileToSend, captionPayload || undefined, true)
+        : await sendChatImageMessage(messageThreadUserId, fileToSend, captionPayload || undefined);
       if (generation !== sendThread.current.generation) return;
       setChatMessages((prev) => [...prev, sent]);
-      setLanguageNotice(sent.language_warning || null);
       void refreshChatInbox(); // Re-sort the list after a new image message is sent
       setImageFile(null);
       setImagePreviewUrl(null);
@@ -434,6 +441,10 @@ export const UserDirectory: React.FC = () => {
       setReplyingTo(null);
     } catch (err: any) {
       if (generation !== sendThread.current.generation) return;
+      if (err?.data?.code === 'offensive_language_warning') {
+        setLanguageWarning({ generation, send: () => { void handleSendImage(true); } });
+        return;
+      }
       const message = err?.message || 'Could not send the image. Please try again.';
       setChatError(message);
       setActionNotice(message);
@@ -443,10 +454,14 @@ export const UserDirectory: React.FC = () => {
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = async (acknowledged = false) => {
     if (!messageThreadUserId || !chatInput.trim() || isSending || sendGuard.current) return;
     const messagePayload = withChatReply(chatInput.trim(), replyingTo);
     if (messagePayload.length > 500) { setChatError('Message is too long. Shorten it and try again.'); return; }
+    if (!acknowledged && containsOffensiveLanguage(messagePayload)) {
+      setLanguageWarning({ generation: sendThread.current.generation, send: () => { void handleSend(true); } });
+      return;
+    }
     sendGuard.current = true;
     const generation = sendThread.current.generation;
     const payload = chatInput.trim();
@@ -456,14 +471,19 @@ export const UserDirectory: React.FC = () => {
     setChatError(null);
     setActionNotice(null);
     try {
-      const sent = await sendChatMessage(messageThreadUserId, messagePayload);
+      const sent = acknowledged ? await sendChatMessage(messageThreadUserId, messagePayload, true)
+        : await sendChatMessage(messageThreadUserId, messagePayload);
       if (generation !== sendThread.current.generation) return;
       setChatMessages((prev) => [...prev, sent]);
-      setLanguageNotice(sent.language_warning || null);
       setReplyingTo(null);
       void refreshChatInbox(); // Re-sort the list after a new message is sent
     } catch (err: any) {
       if (generation !== sendThread.current.generation) return;
+      if (err?.data?.code === 'offensive_language_warning') {
+        setChatInput(current => current || payload);
+        setLanguageWarning({ generation, send: () => { void handleSend(true); } });
+        return;
+      }
       const message = err?.message || 'Could not send the message. Please try again.';
       setChatError(message);
       setActionNotice(message);
@@ -665,7 +685,6 @@ export const UserDirectory: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0 h-full w-full overflow-hidden bg-white">
-      {languageNotice && <div role="status" className="fixed bottom-6 right-6 z-[100] flex w-[calc(100%_-_3rem)] max-w-sm items-start gap-6 rounded-3xl bg-white p-6 text-sm leading-6 shadow-lg ring-1 ring-black/5"><p className="flex-1">Notice: {languageNotice}</p><button onClick={() => setLanguageNotice(null)} aria-label="Dismiss language notice" className="rounded-full p-2"><X size={18} /></button></div>}
       {/* Title & Filter Bar */}
       <div className={clsx('px-4 sm:px-6 py-3 sm:py-3.5 bg-white border-b border-zinc-200/80 flex-col xl:flex-row items-start xl:items-center justify-between gap-3 sm:gap-4 shrink-0', messageThreadUserId !== null ? 'hidden lg:flex' : 'flex')}>
         <div>
@@ -1093,6 +1112,7 @@ export const UserDirectory: React.FC = () => {
 
                                 {/* Bubble Container + Hover Emoji Reaction Bar */}
                                 <div className={clsx('chat-message-content relative flex min-w-0 max-w-full items-center gap-1.5', isMe ? 'chat-message-content--mine flex-row-reverse' : 'flex-row')}>
+                                  <SensitiveMessage key={`${currentUser?.id}-${messageThreadUserId}-${msg.chat_message_id}`} sensitive={!isMe && (!!msg.is_sensitive || containsOffensiveLanguage(msg.message_payload))}>
                                   <MessageActions mine={isMe} reaction={msg.my_reaction} hasText={!!messageText.trim()} busy={pendingActions.has(msg.chat_message_id)}
                                     disabled={pendingActions.has(msg.chat_message_id) || isSending || isSendingImage}
                                     onReact={emoji => void handleToggleReaction(msg.chat_message_id, emoji)}
@@ -1161,6 +1181,7 @@ export const UserDirectory: React.FC = () => {
                                   </div>
 
                                   </MessageActions>
+                                  </SensitiveMessage>
                                 </div>
                               </div>
 
@@ -1563,6 +1584,12 @@ export const UserDirectory: React.FC = () => {
         </div>
       </div>
 
+      {languageWarning && <ChatLanguageDialog mode="send" onClose={() => {
+        setLanguageWarning(null); queueMicrotask(() => composerRef.current?.focus({ preventScroll: true }));
+      }} onConfirm={() => {
+        const warning = languageWarning; setLanguageWarning(null);
+        if (warning.generation === sendThread.current.generation) warning.send();
+      }} />}
       {removeTarget && <RemoveMessageDialog busy={pendingActions.has(removeTarget.chat_message_id)} error={removeError}
         onCancel={() => { setRemoveTarget(null); setRemoveError(null); }}
         onRemove={() => void handleRemoveMessage(removeTarget)} />}

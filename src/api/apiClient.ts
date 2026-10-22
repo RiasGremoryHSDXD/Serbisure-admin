@@ -1,13 +1,14 @@
 // ============================================================================
 // BACKEND TARGET TOGGLE
 // Set to true  (or 'local', 1)  -> Local backend  (http://localhost:8000)
-// Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app) [DEFAULT]
+// Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app)
+// Direct URL [DEFAULT]        -> DigitalOcean   (https://159.89.196.204)
 //
-// For Render, set VITE_API_URL to the HTTPS Render backend URL.
+// VITE_API_URL can override the target with another backend URL.
 // VITE_API_URL, when set, overrides this toggle. Restart Vite after env changes.
 // NOTE: Strictly NO automatic fallback between servers.
 // ============================================================================
-export const USE_LOCAL_BACKEND: boolean | string | number = false;
+export const USE_LOCAL_BACKEND: boolean | string | number = 'https://159.89.196.204';
 
 export const LOCAL_API_URL = 'http://localhost:8000';
 export const VERCEL_API_URL = 'https://serbisure-backend-rho.vercel.app';
@@ -114,6 +115,7 @@ export function sanitizeUserFriendlyError(rawMessage: string): string {
 export interface FetchApiOptions extends RequestInit {
   timeoutMs?: number;
   maxRetries?: number;
+  responseType?: 'json' | 'text' | 'blob';
 }
 
 const DEFAULT_TIMEOUT_MS = 25000; // 25 seconds to comfortably accommodate Vercel serverless cold starts
@@ -127,7 +129,7 @@ const DEFAULT_TIMEOUT_MS = 25000; // 25 seconds to comfortably accommodate Verce
  * - 401 session expiration event dispatch
  */
 export async function fetchApi<T>(endpoint: string, options: FetchApiOptions = {}): Promise<T> {
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, maxRetries = 1, ...fetchOptions } = options;
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, maxRetries = 1, responseType = 'json', ...fetchOptions } = options;
   const url = buildApiUrl(endpoint);
 
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('serbisure_admin_token') : null;
@@ -181,9 +183,11 @@ export async function fetchApi<T>(endpoint: string, options: FetchApiOptions = {
         // Parse error message safely (supporting JSON or HTML error pages from Vercel)
         const contentType = response.headers.get('content-type') || '';
         let message = `API Error: ${response.status} ${response.statusText}`;
+        let errorData: Record<string, unknown> = {};
 
         if (contentType.includes('application/json')) {
           const errorBody = await response.json().catch(() => ({}));
+          errorData = errorBody;
           message = errorBody.detail || errorBody.error || errorBody.message || message;
         } else {
           const textBody = await response.text().catch(() => '');
@@ -194,10 +198,11 @@ export async function fetchApi<T>(endpoint: string, options: FetchApiOptions = {
           }
         }
 
-        throw new Error(sanitizeUserFriendlyError(message));
+        throw Object.assign(new Error(sanitizeUserFriendlyError(message)), { status: response.status, data: errorData });
       }
 
-      return await response.json();
+      if (responseType === 'blob') return await response.blob() as T;
+      return responseType === 'text' ? await response.text() as T : await response.json();
     } catch (err: any) {
       clearTimeout(timer);
 

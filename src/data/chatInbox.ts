@@ -1,4 +1,5 @@
 import type { ChatInboxEntry } from '../types/admin';
+import { containsOffensiveLanguage } from '../utils/offensiveLanguage';
 
 export function parseChatInbox(response: unknown): ChatInboxEntry[] {
   const envelope = response as { data?: unknown; results?: unknown } | null;
@@ -11,7 +12,7 @@ export function parseChatInbox(response: unknown): ChatInboxEntry[] {
   ) || new Set(entries.map(entry => entry.partner_id)).size !== entries.length) {
     throw new Error('Could not sync messages. Please retry.');
   }
-  return entries.map(entry => ({ ...entry, last_message: entry.last_message ?? '' }));
+  return entries.map(entry => ({ ...entry, last_message: containsOffensiveLanguage(entry.last_message) ? 'Sensitive message' : entry.last_message ?? '' }));
 }
 
 export const unreadMessageCount = (entries: ChatInboxEntry[]) =>

@@ -4,12 +4,18 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', 'VITE_')
-  const apiTarget = env.VITE_API_URL || 'https://serbisure-backend-rho.vercel.app'
+  const apiTargetUrl = new URL(env.VITE_API_URL || 'https://159.89.196.204')
+  // Keep local proxy requests on IPv4 when Django listens on 0.0.0.0.
+  if (apiTargetUrl.hostname === 'localhost' && apiTargetUrl.protocol === 'http:') {
+    apiTargetUrl.hostname = '127.0.0.1'
+  }
+  const apiTarget = apiTargetUrl.toString().replace(/\/$/, '')
 
   return {
     plugins: [react()],
     server: {
       port: 3000,
+      host: '0.0.0.0',
       open: false,
       proxy: {
         '/api': {
@@ -21,7 +27,7 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
           ws: true,
-          secure: false,
+          secure: true,
         }
       }
     }
