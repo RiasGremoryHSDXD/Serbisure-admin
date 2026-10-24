@@ -1,7 +1,7 @@
 // Hosted builds always use Railway for API requests and realtime connections.
 // VITE_DEV_API_URL is an optional development-only override; restart Vite after edits.
 // Legacy VITE_API_URL deployment settings are intentionally ignored.
-export const RAILWAY_API_URL = 'https://serbisure-backend-staging-production.up.railway.app';
+export const RAILWAY_API_URL = 'https://serbisure-production-backend.up.railway.app';
 
 function resolveBaseUrl(): string {
   const configured = import.meta.env.DEV && import.meta.env.VITE_DEV_API_URL;
