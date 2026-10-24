@@ -2,13 +2,13 @@
 // BACKEND TARGET TOGGLE
 // Set to true  (or 'local', 1)  -> Local backend  (http://localhost:8000)
 // Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app)
-// Direct URL [DEFAULT]        -> DigitalOcean   (https://159.89.196.204)
+// Direct URL [DEFAULT]        -> Railway staging (isolated staging database)
 //
 // VITE_API_URL can override the target with another backend URL.
 // VITE_API_URL, when set, overrides this toggle. Restart Vite after env changes.
 // NOTE: Strictly NO automatic fallback between servers.
 // ============================================================================
-export const USE_LOCAL_BACKEND: boolean | string | number = 'https://159.89.196.204';
+export const USE_LOCAL_BACKEND: boolean | string | number = 'https://serbisure-backend-staging-production.up.railway.app';
 
 export const LOCAL_API_URL = 'http://localhost:8000';
 export const VERCEL_API_URL = 'https://serbisure-backend-rho.vercel.app';
