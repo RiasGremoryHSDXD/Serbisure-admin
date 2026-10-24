@@ -32,9 +32,9 @@ test('production ignores legacy hosting overrides and development-only settings'
     VITE_API_URL: 'https://retired-backend.example.test',
     VITE_DEV_API_URL: 'http://localhost:8000',
   }, 'https://admin.example.test');
-  assert.equal(api.API_BASE_URL, 'https://serbisure-backend-staging-production.up.railway.app');
+  assert.equal(api.API_BASE_URL, 'https://serbisure-production-backend.up.railway.app');
   assert.equal(api.buildApiUrl('/api/v1/accounts/admin/login/'),
-    'https://serbisure-backend-staging-production.up.railway.app/api/v1/accounts/admin/login/');
+    'https://serbisure-production-backend.up.railway.app/api/v1/accounts/admin/login/');
   const { RealtimeClient } = require('./source-loader.cjs')()('src/realtime/RealtimeClient.ts');
   let socketUrl;
   const realtime = new RealtimeClient(api.API_BASE_URL, url => {
@@ -43,7 +43,7 @@ test('production ignores legacy hosting overrides and development-only settings'
   });
   try {
     realtime.start('test-only-token');
-    assert.equal(socketUrl, 'wss://serbisure-backend-staging-production.up.railway.app/ws/events/');
+    assert.equal(socketUrl, 'wss://serbisure-production-backend.up.railway.app/ws/events/');
   } finally {
     realtime.stop();
   }
@@ -52,9 +52,9 @@ test('production ignores legacy hosting overrides and development-only settings'
 test('development and production use Railway by default, ignoring legacy overrides', () => {
   for (const DEV of [true, false]) {
     const api = client({ DEV, VITE_API_URL: 'https://retired-backend.example.test' }, 'http://localhost:3000');
-    assert.equal(api.API_BASE_URL, 'https://serbisure-backend-staging-production.up.railway.app');
+    assert.equal(api.API_BASE_URL, 'https://serbisure-production-backend.up.railway.app');
     assert.equal(api.buildApiUrl('/api/v1/accounts/admin/penalties/users/'),
-      'https://serbisure-backend-staging-production.up.railway.app/api/v1/accounts/admin/penalties/users/');
+      'https://serbisure-production-backend.up.railway.app/api/v1/accounts/admin/penalties/users/');
   }
 });
 

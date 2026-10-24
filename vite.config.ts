@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', 'VITE_')
-  const apiTargetUrl = new URL(env.VITE_DEV_API_URL || 'https://serbisure-backend-staging-production.up.railway.app')
+  const apiTargetUrl = new URL(env.VITE_DEV_API_URL || 'https://serbisure-production-backend.up.railway.app')
   // Keep local proxy requests on IPv4 when Django listens on 0.0.0.0.
   if (apiTargetUrl.hostname === 'localhost' && apiTargetUrl.protocol === 'http:') {
     apiTargetUrl.hostname = '127.0.0.1'

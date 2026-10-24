@@ -1,14 +1,14 @@
 # Railway admin backend
 
 Production and Preview builds use
-`https://serbisure-backend-staging-production.up.railway.app` for API requests
+`https://serbisure-production-backend.up.railway.app` for API requests
 and authenticated WebSockets. The URL is declared in `src/api/apiClient.ts`.
-The service's existing hostname is retained; its name does not select a database.
+The public hostname matches the production service; its name does not select a database.
 
 The admin does not read a database connection string. Railway's backend
-`DATABASE_URL` determines the database. Switching that connection to
-`serbisure-production-db` is a separate backend step. Until then, this service
-still uses `staging-environment`; deploying this admin change does not change it.
+`DATABASE_URL` determines the database. The production backend must select
+`serbisure-production-db` in its Railway configuration; deploying this admin
+change does not change that database connection.
 
 ## Deploying the admin
 
