@@ -1,38 +1,12 @@
-// ============================================================================
-// BACKEND TARGET TOGGLE
-// Set to true  (or 'local', 1)  -> Local backend  (http://localhost:8000)
-// Set to false (or 'vercel', 2) -> Vercel cloud   (https://serbisure-backend-rho.vercel.app)
-// Direct URL [DEFAULT]        -> Railway staging (isolated staging database)
-//
-// VITE_API_URL can override the target with another backend URL.
-// VITE_API_URL, when set, overrides this toggle. Restart Vite after env changes.
-// NOTE: Strictly NO automatic fallback between servers.
-// ============================================================================
-export const USE_LOCAL_BACKEND: boolean | string | number = 'https://serbisure-backend-staging-production.up.railway.app';
+// Hosted builds always use Railway for API requests and realtime connections.
+// VITE_DEV_API_URL is an optional development-only override; restart Vite after edits.
+// Legacy VITE_API_URL deployment settings are intentionally ignored.
+export const RAILWAY_API_URL = 'https://serbisure-backend-staging-production.up.railway.app';
 
-export const LOCAL_API_URL = 'http://localhost:8000';
-export const VERCEL_API_URL = 'https://serbisure-backend-rho.vercel.app';
-
-/**
- * Resolves the active API base URL based on USE_LOCAL_BACKEND:
- * - true  | 'local'  | 1  => http://localhost:8000
- * - false | 'vercel' | 2  => https://serbisure-backend-rho.vercel.app
- * Strictly NO automatic runtime fallback between servers.
- */
 function resolveBaseUrl(): string {
-  const configured = import.meta.env.VITE_API_URL;
+  const configured = import.meta.env.DEV && import.meta.env.VITE_DEV_API_URL;
   if (configured && /^https?:\/\//.test(configured)) return configured.replace(/\/+$/, '');
-  if (typeof USE_LOCAL_BACKEND === 'string' && /^https?:\/\//.test(USE_LOCAL_BACKEND)) return USE_LOCAL_BACKEND;
-  if (
-    USE_LOCAL_BACKEND === true ||
-    USE_LOCAL_BACKEND === 'local' ||
-    USE_LOCAL_BACKEND === 'LOCAL' ||
-    USE_LOCAL_BACKEND === 1 ||
-    USE_LOCAL_BACKEND === '1'
-  ) {
-    return LOCAL_API_URL;
-  }
-  return VERCEL_API_URL;
+  return RAILWAY_API_URL;
 }
 
 const configuredBaseUrl = resolveBaseUrl();
@@ -52,13 +26,6 @@ export function buildApiUrl(endpoint: string): string {
   const cleanBase = API_BASE_URL.replace(/\/+$/, '');
   const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   return `${cleanBase}${cleanPath}`.replace(/([^:]\/)\/+/g, '$1');
-}
-
-/**
- * Helper to check if the current configuration is targeting the Vercel cloud backend.
- */
-export function isCloudBackend(): boolean {
-  return API_BASE_URL.includes('vercel.app');
 }
 
 /**
