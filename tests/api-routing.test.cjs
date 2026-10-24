@@ -18,25 +18,40 @@ function client(env, origin) {
 test('local development uses the page origin on phones and desktops for API and realtime', () => {
   for (const backend of ['http://localhost:8000', 'http://127.0.0.1:8000', 'http://[::1]:8000']) {
     for (const origin of ['http://192.168.1.14:3000', 'http://localhost:3000']) {
-      const api = client({ DEV: true, VITE_API_URL: backend }, origin);
+      const api = client({ DEV: true, VITE_DEV_API_URL: backend }, origin);
       assert.equal(api.API_BASE_URL, origin);
       assert.equal(api.buildApiUrl('/api/v1/accounts/admin/login/'), origin + '/api/v1/accounts/admin/login/');
       assert.equal(api.buildApiUrl('api/v1/accounts/admin/users/'), origin + '/api/v1/accounts/admin/users/');
-      assert.equal(api.isCloudBackend(), false);
     }
   }
 });
 
-test('hosted targets and production builds keep their explicitly configured backend', () => {
-  const cloud = 'https://serbisure-backend-rho.vercel.app';
-  assert.equal(client({ DEV: true, VITE_API_URL: cloud }, 'http://192.168.1.14:3000').API_BASE_URL, cloud);
-  assert.equal(client({ DEV: false, VITE_API_URL: cloud }, 'https://admin.example.test').API_BASE_URL, cloud);
-  assert.equal(client({ DEV: false, VITE_API_URL: 'http://localhost:8000' }, 'http://localhost:3000').API_BASE_URL, 'http://localhost:8000');
+test('production ignores legacy hosting overrides and development-only settings', () => {
+  const api = client({
+    DEV: false,
+    VITE_API_URL: 'https://retired-backend.example.test',
+    VITE_DEV_API_URL: 'http://localhost:8000',
+  }, 'https://admin.example.test');
+  assert.equal(api.API_BASE_URL, 'https://serbisure-backend-staging-production.up.railway.app');
+  assert.equal(api.buildApiUrl('/api/v1/accounts/admin/login/'),
+    'https://serbisure-backend-staging-production.up.railway.app/api/v1/accounts/admin/login/');
+  const { RealtimeClient } = require('./source-loader.cjs')()('src/realtime/RealtimeClient.ts');
+  let socketUrl;
+  const realtime = new RealtimeClient(api.API_BASE_URL, url => {
+    socketUrl = url;
+    return { send() {}, close() {} };
+  });
+  try {
+    realtime.start('test-only-token');
+    assert.equal(socketUrl, 'wss://serbisure-backend-staging-production.up.railway.app/ws/events/');
+  } finally {
+    realtime.stop();
+  }
 });
 
-test('without an override the staging branch uses Railway for API and realtime', () => {
+test('development and production use Railway by default, ignoring legacy overrides', () => {
   for (const DEV of [true, false]) {
-    const api = client({ DEV }, 'http://localhost:3000');
+    const api = client({ DEV, VITE_API_URL: 'https://retired-backend.example.test' }, 'http://localhost:3000');
     assert.equal(api.API_BASE_URL, 'https://serbisure-backend-staging-production.up.railway.app');
     assert.equal(api.buildApiUrl('/api/v1/accounts/admin/penalties/users/'),
       'https://serbisure-backend-staging-production.up.railway.app/api/v1/accounts/admin/penalties/users/');
@@ -56,9 +71,9 @@ test('the Vite API proxy preserves login requests and backend responses', async 
   });
   await new Promise(resolve => backend.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => backend.close(resolve)));
-  const previous = process.env.VITE_API_URL;
-  process.env.VITE_API_URL = `http://127.0.0.1:${backend.address().port}`;
-  t.after(() => { if (previous === undefined) delete process.env.VITE_API_URL; else process.env.VITE_API_URL = previous; });
+  const previous = process.env.VITE_DEV_API_URL;
+  process.env.VITE_DEV_API_URL = `http://127.0.0.1:${backend.address().port}`;
+  t.after(() => { if (previous === undefined) delete process.env.VITE_DEV_API_URL; else process.env.VITE_DEV_API_URL = previous; });
   const { createServer } = await import('vite');
   const vite = await createServer({
     root: path.resolve(__dirname, '..'),
