@@ -144,6 +144,74 @@ test('existing Audit Trail displays the correction, officer, resident and docume
   } finally { act(() => view.unmount()); }
 });
 
+test('document preview compares OCR and registration for both roles and marks only flagged fields', () => {
+  const doc = {
+    id: 'doc-1', userId: 'resident', name: 'Christine Tagupa',
+    role: 'HOMEOWNER', barangay: 'Agusan', documentType: 'National ID (Front)', rawDocumentType: 'national_id_front',
+    status: 'PENDING / REVIEW', recordStatus: 'Flagged', documentImage: '',
+    documentNumber: '1234-5678-9012-3456',
+    accountRegistration: {
+      first_name: 'Christine', middle_name: 'Cruz', last_name: 'Tagupa',
+      date_of_birth: '2004-09-24', address: 'Lot 3, Agusan, Cagayan de Oro, Misamis Oriental, 9000',
+    },
+    ocrExtractedData: {
+      first_name: 'JAMES CHRISTOPHER', middle_name: 'CINCHES', last_name: 'TAGUPA',
+      date_of_birth: 'Sep 24, 2004', address: 'Lot 3, Agusan',
+      _reviewer_corrections: { last_name: {} },
+    },
+    ocrDiscrepancies: [
+      { field: 'first_name', message: 'First names differ.' },
+      { field: 'middle_name', message: 'Middle names differ.' },
+      { field: 'barangay', message: 'Barangays differ.' },
+    ],
+  };
+  const state = { verifications: [doc], selectedVerificationId: doc.id, isComparisonModalOpen: false };
+  const { DocumentPreview } = loader({ 'src/context/AdminContext.tsx': { useAdmin: () => state } })('src/components/verifications/DocumentPreview.tsx');
+  for (const role of ['ADMIN', 'SUPERADMIN']) {
+    state.currentRole = role;
+    const html = renderToStaticMarkup(React.createElement(DocumentPreview));
+    assert.match(html, /OCR Result \(Document\)<\/th>.*Account Registration<\/th>/);
+    const fields = html.match(/<tbody[^>]*>.*?<\/tbody>/g);
+    assert.equal(fields.length, 5);
+    assert.match(fields[0], /First Name.*Mismatch.*JAMES CHRISTOPHER.*Christine/);
+    assert.match(fields[1], /Middle Name.*Mismatch.*CINCHES.*Cruz/);
+    assert.match(fields[2], /Last Name.*TAGUPA.*Reviewer corrected.*Tagupa/);
+    assert.match(fields[3], /Birthdate.*Sep 24, 2004.*Sep 24, 2004/);
+    assert.match(fields[4], /Address.*Mismatch.*Lot 3, Agusan.*Lot 3, Agusan, Cagayan de Oro, Misamis Oriental, 9000/);
+    assert.doesNotMatch(fields[2] + fields[3], /Mismatch/);
+    assert.doesNotMatch(html, /Account Name<\/span>|ID Name \(OCR\)<\/span>/);
+    assert.match(html, /<\/table>.*ID Type.*Copy to clipboard.*Verify on PhilSys eVerify.*Date Issued.*Validity.*Status.*Edit details/);
+    assert.match(html, /Flagged Discrepancies \(3\)/);
+  }
+});
+
+test('document preview shows placeholders and retains legacy OCR evidence and quality warnings', () => {
+  const doc = {
+    id: 'legacy-doc', userId: 'resident', name: 'Christine Tagupa',
+    role: 'HOMEOWNER', barangay: 'Agusan', documentType: 'National ID (Front)', rawDocumentType: 'national_id_front',
+    status: 'PENDING / REVIEW', recordStatus: 'Flagged', documentImage: '',
+    accountRegistration: { first_name: 'Christine', last_name: 'Tagupa', middle_name: null, date_of_birth: '', address: '  ' },
+  };
+  const state = { verifications: [doc], selectedVerificationId: doc.id, isComparisonModalOpen: false };
+  const { DocumentPreview } = loader({ 'src/context/AdminContext.tsx': { useAdmin: () => state } })('src/components/verifications/DocumentPreview.tsx');
+  for (const ocr of [null, {}, { first_name: null, last_name: '', address: '  ' }]) {
+    doc.ocrExtractedData = ocr;
+    doc.ocrDiscrepancies = [{ field: 'image_quality', message: 'No readable text detected by OCR — please check if the uploaded image is valid.' }];
+    const html = renderToStaticMarkup(React.createElement(DocumentPreview));
+    assert.equal((html.match(/>Not detected<\/td>/g) || []).length, 5);
+    assert.equal((html.match(/>Not provided<\/td>/g) || []).length, 3);
+    assert.match(html, /Flagged Discrepancies \(1\).*No readable text detected by OCR/);
+    assert.doesNotMatch(html, /Mismatch|Full name from OCR/);
+  }
+  doc.ocrExtractedData = { full_name: 'JAMES CHRISTOPHER TAGUPA' };
+  doc.ocrDiscrepancies = null;
+  delete doc.accountRegistration;
+  const legacy = renderToStaticMarkup(React.createElement(DocumentPreview));
+  assert.match(legacy, /Full name from OCR .*JAMES CHRISTOPHER TAGUPA/);
+  assert.equal((legacy.match(/>Not detected<\/td>/g) || []).length, 5);
+  assert.equal((legacy.match(/>Not provided<\/td>/g) || []).length, 5);
+});
+
 test('correction API uses PATCH with no automatic mutation retries', async () => {
   const calls = [];
   const api = loader({ 'src/api/apiClient.ts': { fetchApi: async (...args) => { calls.push(args); return {}; } } })('src/api/adminApi.ts');

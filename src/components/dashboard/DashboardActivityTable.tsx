@@ -60,6 +60,14 @@ function CompactPagination({ page, totalPages, onPrevious, onNext, label }: Comp
   </nav>;
 }
 
+function formatDatePosted(dateStr?: string | null): string {
+  const date = dateStr ? new Date(dateStr) : null;
+  if (!date || Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-US', {
+    timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric',
+  });
+}
+
 function formatAuditDate(dateStr?: string | null): string {
   if (!dateStr) return '—';
   try {
@@ -203,13 +211,14 @@ function buildPdfReport(
     title = 'Placement & Bookings Compliance Report';
     subtitle = 'Republic Act No. 10361 (Batas Kasambahay) Mandatory Wage Baseline & Employment Placement Register';
     count = filteredBookings.length;
-    colSpan = 6;
+    colSpan = 7;
     tableHeaders = `
       <th style="width: 5%; text-align: center;">#</th>
-      <th style="width: 25%;">Employer / Household</th>
-      <th style="width: 25%;">Kasambahay / Worker</th>
-      <th style="width: 17%;">Monthly Wage</th>
+      <th style="width: 20%;">Employer / Household</th>
+      <th style="width: 20%;">Kasambahay / Worker</th>
+      <th style="width: 14%;">Monthly Wage</th>
       <th style="width: 14%; text-align: center;">Contract Type</th>
+      <th style="width: 13%;">Date Posted</th>
       <th style="width: 14%; text-align: center;">Compliance Status</th>
     `;
     tableRows = filteredBookings.map((b, idx) => {
@@ -249,6 +258,7 @@ function buildPdfReport(
           <td style="text-align: center;">
             <span class="contract-badge">${escapeHtml(contractDisplay)}</span>
           </td>
+          <td>${escapeHtml(formatDatePosted(b.createdAt))}</td>
           <td style="text-align: center;">${getDeploymentStatusPill(rawStatus)}</td>
         </tr>
       `;
@@ -1021,13 +1031,14 @@ export const DashboardActivityTable: React.FC = () => {
             </div>
           ) : (
             <>
-              <table className="dashboard-records w-full text-left text-xs min-w-[620px]">
+              <table className="dashboard-records w-full text-left text-xs min-w-[720px]">
                 <thead>
                   <tr className="text-zinc-400 font-extrabold font-display uppercase tracking-wider text-[11px]">
                     <th className="pb-3 px-3">Employer</th>
                     <th className="pb-3 px-3">Kasambahay</th>
                     <th className="pb-3 px-3">Monthly Wage</th>
                     <th className="pb-3 px-3">Contract Type</th>
+                    <th className="pb-3 px-3">Date Posted</th>
                     <th className="pb-3 px-3 text-right">Status</th>
                   </tr>
                 </thead>
@@ -1057,6 +1068,9 @@ export const DashboardActivityTable: React.FC = () => {
                         <span className="px-3 py-1 rounded-full bg-zinc-100 text-zinc-800 text-[11px] font-bold">
                           {b.contractType}
                         </span>
+                      </td>
+                      <td data-label="Date Posted" className="py-3 px-3 whitespace-nowrap">
+                        {formatDatePosted(b.createdAt)}
                       </td>
                       <td data-label="Status" className="py-3 px-3 text-right rounded-r-2xl">
                         {renderBookingStatusBadge(b.bookingStatus)}

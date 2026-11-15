@@ -7,6 +7,30 @@ import { groupVerificationApplicants } from '../../data/verificationApplicants';
 import { ReviewerCorrectionsForm } from './ReviewerCorrectionsForm';
 import { ProfilePhotoReview } from './ProfilePhotoReview';
 
+const comparisonFields = [
+  { key: 'first_name', label: 'First Name' },
+  { key: 'middle_name', label: 'Middle Name' },
+  { key: 'last_name', label: 'Last Name' },
+  { key: 'date_of_birth', label: 'Birthdate' },
+  { key: 'address', label: 'Address' },
+] as const;
+const addressFields = ['street', 'barangay', 'city', 'province', 'zipcode', 'zip_code'];
+
+function readComparisonValue(value: unknown) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return /^(?:not detected(?: in ocr)?|not provided|n\/a|—)$/i.test(text) ? '' : text;
+}
+
+function formatBirthdate(value: string) {
+  if (!value) return '';
+  // Treat an ISO birthdate as a calendar date so a reviewer's timezone cannot shift it.
+  const isoDate = value.match(/^\d{4}-\d{2}-\d{2}(?=$|T)/)?.[0];
+  const date = new Date(isoDate ? `${isoDate}T00:00:00` : value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export const DocumentPreview: React.FC = () => {
   const { 
     verifications, 
@@ -387,16 +411,16 @@ export const DocumentPreview: React.FC = () => {
     : selectedItem.documentImage;
 
   // Active OCR Data and active metadata depending on selected tab (front vs back / NBI vs Police)
-  const activeOcrData = (idSide === 'back' && hasSecondary && selectedItem.secondaryOcrData)
-    ? selectedItem.secondaryOcrData
-    : (selectedItem.ocrExtractedData || {});
-
-  // OCR Name extraction: strictly from OCR data, never falling back to profile username/account name
-  const ocrExtractedName = 
-    activeOcrData?.full_name ||
-    [activeOcrData?.first_name, activeOcrData?.middle_name, activeOcrData?.last_name].filter(Boolean).join(' ') ||
-    (activeOcrData?.name ? String(activeOcrData.name) : undefined);
-  const idName = ocrExtractedName || 'Not Detected in OCR';
+  const showingSecondary = idSide === 'back' && hasSecondary;
+  const activeOcrData = (showingSecondary ? selectedItem.secondaryOcrData : selectedItem.ocrExtractedData) || {};
+  const activeDiscrepancies = (showingSecondary ? selectedItem.secondaryOcrDiscrepancies : selectedItem.ocrDiscrepancies) || [];
+  const registration = selectedItem.accountRegistration;
+  const correctedFields = Object.keys(activeOcrData._reviewer_corrections || {});
+  const flaggedFields = new Set(activeDiscrepancies.map(discrepancy => discrepancy.field));
+  const ocrNameParts = [activeOcrData.first_name, activeOcrData.middle_name, activeOcrData.last_name]
+    .map(readComparisonValue).filter(Boolean).join(' ');
+  const ocrFullName = readComparisonValue(activeOcrData.full_name) || readComparisonValue(activeOcrData.name);
+  const idName = ocrFullName || ocrNameParts || 'Not detected';
 
   const docNumber = (idSide === 'back' && hasSecondary && selectedItem.secondaryDocumentNumber)
     ? selectedItem.secondaryDocumentNumber
@@ -672,12 +696,49 @@ export const DocumentPreview: React.FC = () => {
               </button>
             </div>
 
-            {/* Details list (Clean, airy key-value block without grey zebra stripes) */}
+            <div className="overflow-hidden rounded-xl border border-zinc-200">
+              <table aria-label="Document and registration comparison" className="w-full table-fixed border-collapse text-left text-xs">
+                <thead className="bg-zinc-100 text-zinc-900">
+                  <tr>
+                    <th scope="col" className="px-3 py-2 font-bold">OCR Result (Document)</th>
+                    <th scope="col" className="border-l border-zinc-200 px-3 py-2 font-bold">Account Registration</th>
+                  </tr>
+                </thead>
+                {comparisonFields.map(({ key, label }) => {
+                  const formatValue = key === 'date_of_birth' ? formatBirthdate : (value: string) => value;
+                  const ocrValue = formatValue(readComparisonValue(activeOcrData[key]));
+                  const accountValue = formatValue(readComparisonValue(registration?.[key]));
+                  const mismatch = flaggedFields.has(key)
+                    || (key === 'address' && addressFields.some(field => flaggedFields.has(field)));
+                  return (
+                    <tbody key={key} className={mismatch ? 'bg-amber-50' : undefined}>
+                      <tr>
+                        <th colSpan={2} scope="rowgroup" className="border-t border-zinc-200 px-3 pt-2 font-semibold text-zinc-600">
+                          {label}
+                          {mismatch && <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-900">Mismatch</span>}
+                        </th>
+                      </tr>
+                      <tr>
+                        <td className={`px-3 pb-2 pt-0.5 align-top [overflow-wrap:anywhere] ${ocrValue ? 'font-semibold text-zinc-900' : 'text-zinc-500'}`}>
+                          {ocrValue || 'Not detected'}
+                          {correctedFields.includes(key) && <span className="block text-[10px] font-medium text-zinc-500">Reviewer corrected</span>}
+                        </td>
+                        <td className={`border-l border-zinc-200 px-3 pb-2 pt-0.5 align-top [overflow-wrap:anywhere] ${accountValue ? 'font-semibold text-zinc-900' : 'text-zinc-500'}`}>
+                          {accountValue || 'Not provided'}
+                        </td>
+                      </tr>
+                    </tbody>
+                  );
+                })}
+              </table>
+              {ocrFullName && !ocrNameParts && (
+                <p className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-600 [overflow-wrap:anywhere]">
+                  Full name from OCR <strong className="text-zinc-900">{ocrFullName}</strong>
+                </p>
+              )}
+            </div>
+
             <div className="verification-document-fields space-y-2.5 text-xs pt-3 border-t border-zinc-100">
-              <div className="flex justify-between items-center py-0.5">
-                <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider font-display">ID Name</span>
-                <span className="font-bold text-[#0D0D11] text-xs font-display">{idName}</span>
-              </div>
               <div className="flex justify-between items-center py-0.5">
                 <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider font-display">ID Type</span>
                 <span className="font-bold text-[#0D0D11] text-xs font-display">{resolvedIdType}</span>
@@ -753,13 +814,13 @@ export const DocumentPreview: React.FC = () => {
             <ReviewerCorrectionsForm key={selectedItem.id} documentId={selectedItem.id} onSaved={refreshReviewData} />
 
             {/* Discrepancies if any */}
-            {selectedItem.ocrDiscrepancies && selectedItem.ocrDiscrepancies.length > 0 && (
+            {activeDiscrepancies.length > 0 && (
               <div className="mt-2 p-3 bg-amber-50 rounded-2xl space-y-1">
                 <div className="flex items-center gap-1 text-amber-900 text-[11px] font-black font-display">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>Flagged Discrepancies ({selectedItem.ocrDiscrepancies.length})</span>
+                  <span>Flagged Discrepancies ({activeDiscrepancies.length})</span>
                 </div>
-                {selectedItem.ocrDiscrepancies.map((disc, idx) => (
+                {activeDiscrepancies.map((disc, idx) => (
                   <div key={idx} className="text-[11px] text-amber-900/80 pl-4 list-disc font-medium">
                     • {disc.message || `${disc.field}: expected '${disc.profile_value}', got '${disc.document_value}'`}
                   </div>

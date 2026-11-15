@@ -117,10 +117,10 @@ export interface VerificationRequest {
   notes?: string;
   faceLivenessMatchScore?: number | null; // Unavailable until server-validated biometric evidence exists.
   ocrExtractedData?: {
-    full_name?: string;
-    first_name?: string;
-    middle_name?: string;
-    last_name?: string;
+    full_name?: string | null;
+    first_name?: string | null;
+    middle_name?: string | null;
+    last_name?: string | null;
     document_number?: string;
     clearance_number?: string;
     philsys_number?: string;
@@ -129,11 +129,12 @@ export interface VerificationRequest {
     issuing_office?: string;
     date_issued?: string;
     valid_until?: string;
-    date_of_birth?: string;
+    date_of_birth?: string | null;
+    address?: string | null;
     barangay?: string;
     city?: string;
     [key: string]: any;
-  };
+  } | null;
   ocrDiscrepancies?: Array<{
     field: string;
     message?: string;
@@ -143,6 +144,16 @@ export interface VerificationRequest {
     document_value?: string;
   }>;
   ocrMatchScore?: number | null; // Document text matching, percentage 0..100.
+  accountName?: string;
+  accountRegistration?: {
+    first_name: string | null;
+    middle_name: string | null;
+    last_name: string | null;
+    date_of_birth: string | null;
+    address: string | null;
+    barangay: string | null;
+    city: string | null;
+  } | null;
 }
 
 export interface LinkedWorker {
@@ -212,6 +223,7 @@ export interface BookingCompliance {
     thirteenthMonth: boolean;
   };
   startDate: string;
+  createdAt?: string | null;
   barangay?: string;
   bookingStatus?: string;
   status: 'ACTIVE' | 'FLAGGED_THROTTLED' | 'COMPLIANT' | 'DISPUTED' | 'BELOW_MINIMUM_WAGE' | 'REQUIRES_REVIEW';
